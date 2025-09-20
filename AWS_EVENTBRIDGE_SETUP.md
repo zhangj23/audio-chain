@@ -36,7 +36,7 @@ If you prefer to set it up manually:
 aws events put-rule \
   --name weave-weekly-video-compilation \
   --description "Weekly video compilation for Weave app" \
-  --schedule-expression "cron(0 0 ? * SUN *)" \
+   --schedule-expression "cron(0 0 ? * 7 *)" \
   --state ENABLED
 ```
 
@@ -68,7 +68,7 @@ aws lambda add-permission \
 ### Weekly (Every Sunday at Midnight UTC)
 
 ```
-cron(0 0 ? * SUN *)
+cron(0 0 ? * 7 *)
 ```
 
 ### Daily (Every Day at Midnight UTC)
@@ -80,14 +80,14 @@ cron(0 0 * * ? *)
 ### Custom Time (Every Sunday at 2 AM UTC)
 
 ```
-cron(0 2 ? * SUN *)
+cron(0 2 ? * 7 *)
 ```
 
 ### Time Zone Considerations
 
 - EventBridge uses UTC by default
 - For local time zones, adjust the hour accordingly
-- Example: For EST (UTC-5), use `cron(0 5 ? * SUN *)` for midnight EST
+- Example: For EST (UTC-5), use `cron(0 5 ? * 7 *)` for midnight EST
 
 ## 🧪 Testing
 

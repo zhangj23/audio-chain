@@ -25,7 +25,7 @@ def create_eventbridge_rule():
         response = eventbridge_client.put_rule(
             Name=rule_name,
             Description=rule_description,
-            ScheduleExpression='cron(0 0 ? * SUN *)',  # Every Sunday at midnight UTC
+            ScheduleExpression='cron(0 0 ? * 7 *)',  # Every Sunday at midnight UTC
             State='ENABLED'
         )
         
