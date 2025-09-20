@@ -11,6 +11,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupDetail } from "@/components/group-detail";
+import { CreateGroupModal } from "@/components/create-group-modal";
 import { useState } from "react";
 
 const { width } = Dimensions.get("window");
@@ -50,17 +51,40 @@ const mockGroups = [
 ];
 
 export default function HomeScreen() {
+  const [groups, setGroups] = useState(mockGroups);
   const [selectedGroup, setSelectedGroup] = useState(mockGroups[0]);
   const [showGroupDetail, setShowGroupDetail] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [detailGroup, setDetailGroup] = useState<any>(null);
 
   const createNewGroup = () => {
+    setShowCreateGroup(true);
+  };
+
+  const handleCreateGroup = (groupData: {
+    name: string;
+    prompt: string;
+    deadline: string;
+    members: string[];
+  }) => {
+    const newGroup = {
+      id: Date.now().toString(),
+      name: groupData.name,
+      members: groupData.members,
+      videosSubmitted: 0,
+      totalMembers: groupData.members.length,
+      dueDate: groupData.deadline,
+      prompt: groupData.prompt,
+      isRevealed: false,
+    };
+
+    setGroups(prevGroups => [newGroup, ...prevGroups]);
+    
     Alert.alert(
-      "Create New Group",
-      "Group creation functionality will be implemented next!",
+      "Group Created! 🎉",
+      `"${groupData.name}" has been created successfully!`,
       [{ text: "OK" }]
     );
-    // TODO: Navigate to group creation screen
   };
 
   const navigateToGroup = (group: any) => {
@@ -102,7 +126,7 @@ export default function HomeScreen() {
         style={styles.groupsSection}
         showsVerticalScrollIndicator={false}
       >
-        {mockGroups.map((group) => (
+        {groups.map((group) => (
           <TouchableOpacity
             key={group.id}
             style={styles.groupCard}
@@ -174,6 +198,13 @@ export default function HomeScreen() {
           />
         )}
       </Modal>
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        visible={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
+        onCreateGroup={handleCreateGroup}
+      />
     </ThemedView>
   );
 }

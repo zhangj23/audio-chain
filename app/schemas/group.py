@@ -7,7 +7,7 @@ class GroupBase(BaseModel):
     description: Optional[str] = None
 
 class GroupCreate(GroupBase):
-    pass
+    invited_usernames: Optional[List[str]] = []  # List of usernames to invite
 
 class GroupResponse(GroupBase):
     id: int
@@ -29,8 +29,25 @@ class GroupMemberResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class GroupPendingRequestResponse(BaseModel):
+    id: int
+    group_id: int
+    invited_username: str
+    invited_by: int
+    status: str
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
 class GroupJoin(BaseModel):
     invite_code: str
 
 class GroupWithMembers(GroupResponse):
     members: List[GroupMemberResponse] = []
+    pending_requests: List[GroupPendingRequestResponse] = []
+
+class GroupCreateResponse(GroupResponse):
+    pending_requests: List[GroupPendingRequestResponse] = []
+    message: str
