@@ -6,11 +6,14 @@ import {
   Dimensions,
   Alert,
   Image,
+  TextInput,
 } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useState } from "react";
+import { useProfile } from "../../contexts/ProfileContext";
+import * as ImagePicker from "expo-image-picker";
 
 const { width } = Dimensions.get("window");
 
@@ -63,18 +66,102 @@ const recentActivity = [
 
 export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
+
+  // Use profile context
+  const { profileImage, setProfileImage, userName, setUserName } = useProfile();
+
+  // Profile editing state
+  const [editedName, setEditedName] = useState(userName);
+  const [editedBio, setEditedBio] = useState(userData.bio);
 
   const editProfile = () => {
-    setIsEditing(!isEditing);
     if (isEditing) {
+      // Save changes
+      setUserName(editedName);
+      userData.name = editedName;
+      userData.bio = editedBio;
       Alert.alert("Profile Updated", "Your changes have been saved!");
+    }
+    setIsEditing(!isEditing);
+  };
+
+  const cancelEdit = () => {
+    // Reset to original values
+    setEditedName(userName);
+    setEditedBio(userData.bio);
+    setIsEditing(false);
+  };
+
+  const openCamera = async () => {
+    try {
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission denied",
+          "Camera permission is required to take photos"
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setProfileImage(result.assets[0].uri);
+        Alert.alert("Success", "Profile picture updated!");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to take photo");
+      console.error(error);
+    }
+  };
+
+  const openGallery = async () => {
+    try {
+      // Request media library permissions
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission denied",
+          "Photo library permission is required to select photos"
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setProfileImage(result.assets[0].uri);
+        Alert.alert("Success", "Profile picture updated!");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to select photo");
+      console.error(error);
     }
   };
 
   const changeProfilePicture = () => {
     Alert.alert("Change Profile Picture", "Choose your new profile photo", [
-      { text: "Camera", onPress: () => console.log("Open camera") },
-      { text: "Gallery", onPress: () => console.log("Open gallery") },
+      {
+        text: "Camera",
+        onPress: openCamera,
+      },
+      {
+        text: "Gallery",
+        onPress: openGallery,
+      },
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -116,34 +203,60 @@ export default function ProfileScreen() {
     </View>
   );
 
-  const renderAchievements = () => (
-    <View style={styles.section}>
-      <ThemedText style={styles.sectionTitle}>Achievements</ThemedText>
-      <View style={styles.achievementsGrid}>
-        {userData.achievements.map((achievement) => (
-          <View
-            key={achievement.id}
-            style={[
-              styles.achievementCard,
-              achievement.earned && styles.achievementEarned,
-            ]}
-          >
+  const renderAchievements = () => {
+    const earnedCount = userData.achievements.filter((a) => a.earned).length;
+
+    return (
+      <View style={styles.section}>
+        <TouchableOpacity
+          style={styles.achievementToggle}
+          onPress={() => setShowAchievements(!showAchievements)}
+        >
+          <View style={styles.achievementHeader}>
             <IconSymbol
-              name={achievement.earned ? "star.fill" : "star"}
-              size={24}
-              color={achievement.earned ? "#FFD700" : "#666"}
+              name={earnedCount > 0 ? "star.fill" : "star"}
+              size={16}
+              color="#888"
             />
-            <ThemedText style={styles.achievementTitle}>
-              {achievement.title}
-            </ThemedText>
-            <ThemedText style={styles.achievementDesc}>
-              {achievement.description}
+            <ThemedText style={styles.achievementToggleText}>
+              {earnedCount}/{userData.achievements.length} achievements
             </ThemedText>
           </View>
-        ))}
+          <IconSymbol
+            name={showAchievements ? "chevron.up" : "chevron.down"}
+            size={14}
+            color="#666"
+          />
+        </TouchableOpacity>
+
+        {showAchievements && (
+          <View style={styles.achievementsGrid}>
+            {userData.achievements.map((achievement) => (
+              <View
+                key={achievement.id}
+                style={[
+                  styles.achievementCard,
+                  achievement.earned && styles.achievementEarned,
+                ]}
+              >
+                <IconSymbol
+                  name={achievement.earned ? "star.fill" : "star"}
+                  size={20}
+                  color={achievement.earned ? "#fff" : "#666"}
+                />
+                <ThemedText style={styles.achievementTitle}>
+                  {achievement.title}
+                </ThemedText>
+                <ThemedText style={styles.achievementDesc}>
+                  {achievement.description}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
-    </View>
-  );
+    );
+  };
 
   const renderRecentActivity = () => (
     <View style={styles.section}>
@@ -192,27 +305,77 @@ export default function ProfileScreen() {
             style={styles.profilePictureContainer}
           >
             <View style={styles.profilePicture}>
-              <IconSymbol name="person.fill" size={40} color="#666" />
+              {profileImage ? (
+                <Image
+                  source={{ uri: profileImage }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <IconSymbol name="person.fill" size={40} color="#666" />
+              )}
             </View>
             <View style={styles.editBadge}>
-              <IconSymbol name="camera.fill" size={12} color="#fff" />
+              <IconSymbol name="camera.fill" size={12} color="#000" />
             </View>
           </TouchableOpacity>
 
-          <ThemedText style={styles.userName}>{userData.name}</ThemedText>
+          {isEditing ? (
+            <TextInput
+              style={styles.editableUserName}
+              value={editedName}
+              onChangeText={setEditedName}
+              placeholder="Your name"
+              placeholderTextColor="#666"
+              multiline={false}
+              maxLength={50}
+            />
+          ) : (
+            <ThemedText style={styles.userName}>{editedName}</ThemedText>
+          )}
+
           <ThemedText style={styles.userHandle}>{userData.username}</ThemedText>
 
-          <TouchableOpacity onPress={() => setIsEditing(!isEditing)}>
-            <ThemedText style={styles.userBio}>{userData.bio}</ThemedText>
-          </TouchableOpacity>
+          {isEditing ? (
+            <TextInput
+              style={styles.editableBio}
+              value={editedBio}
+              onChangeText={setEditedBio}
+              placeholder="Tell us about yourself..."
+              placeholderTextColor="#666"
+              multiline={true}
+              maxLength={200}
+              textAlignVertical="top"
+            />
+          ) : (
+            <TouchableOpacity onPress={() => setIsEditing(true)}>
+              <ThemedText style={styles.userBio}>{editedBio}</ThemedText>
+            </TouchableOpacity>
+          )}
 
           {renderStats()}
 
-          <TouchableOpacity style={styles.editButton} onPress={editProfile}>
-            <ThemedText style={styles.editButtonText}>
-              {isEditing ? "Save Changes" : "Edit Profile"}
-            </ThemedText>
-          </TouchableOpacity>
+          {isEditing ? (
+            <View style={styles.editButtonsContainer}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={cancelEdit}
+              >
+                <ThemedText style={styles.cancelButtonText}>Cancel</ThemedText>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveButton} onPress={editProfile}>
+                <ThemedText style={styles.saveButtonText}>
+                  Save Changes
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.editButton} onPress={editProfile}>
+              <ThemedText style={styles.editButtonText}>
+                Edit Profile
+              </ThemedText>
+            </TouchableOpacity>
+          )}
         </View>
 
         {renderAchievements()}
@@ -222,11 +385,11 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>My Groups</ThemedText>
           <TouchableOpacity style={styles.quickAction}>
-            <IconSymbol name="person.3.fill" size={20} color="#007AFF" />
+            <IconSymbol name="person.3.fill" size={20} color="#fff" />
             <ThemedText style={styles.quickActionText}>
               Manage My Groups
             </ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
+            <IconSymbol name="chevron.right" size={16} color="#888" />
           </TouchableOpacity>
         </View>
 
@@ -236,18 +399,18 @@ export default function ProfileScreen() {
             Privacy & Settings
           </ThemedText>
           <TouchableOpacity style={styles.quickAction}>
-            <IconSymbol name="lock.fill" size={20} color="#007AFF" />
+            <IconSymbol name="lock.fill" size={20} color="#fff" />
             <ThemedText style={styles.quickActionText}>
               Privacy Settings
             </ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
+            <IconSymbol name="chevron.right" size={16} color="#888" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.quickAction}>
-            <IconSymbol name="bell.fill" size={20} color="#007AFF" />
+            <IconSymbol name="bell.fill" size={20} color="#fff" />
             <ThemedText style={styles.quickActionText}>
               Notifications
             </ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
+            <IconSymbol name="chevron.right" size={16} color="#888" />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -258,6 +421,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#000",
   },
   header: {
     flexDirection: "row",
@@ -266,10 +430,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
+    backgroundColor: "#000",
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
+    color: "#fff",
   },
   headerButtons: {
     flexDirection: "row",
@@ -279,7 +445,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -299,9 +465,11 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#333",
   },
   editBadge: {
     position: "absolute",
@@ -310,65 +478,82 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#007AFF",
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#000",
   },
   userName: {
     fontSize: 24,
     fontWeight: "700",
     marginBottom: 4,
+    color: "#fff",
   },
   userHandle: {
     fontSize: 16,
-    opacity: 0.7,
+    color: "#888",
     marginBottom: 12,
+    fontWeight: "400",
   },
   userBio: {
     fontSize: 14,
     textAlign: "center",
-    opacity: 0.8,
+    color: "#ccc",
     lineHeight: 20,
     marginBottom: 20,
+    fontWeight: "400",
   },
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
     width: "100%",
-    paddingVertical: 20,
-    marginBottom: 20,
+    paddingVertical: 16,
+    marginBottom: 24,
+    backgroundColor: "#0a0a0a",
+    borderRadius: 12,
+    marginHorizontal: 20,
   },
   statItem: {
     alignItems: "center",
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     marginBottom: 4,
+    color: "#fff",
   },
   statLabel: {
-    fontSize: 12,
-    opacity: 0.7,
+    fontSize: 11,
+    color: "#888",
+    fontWeight: "500",
   },
   editButton: {
-    backgroundColor: "#007AFF",
+    backgroundColor: "#fff",
     borderRadius: 20,
     paddingHorizontal: 32,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#333",
   },
   editButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#fff",
+    color: "#000",
   },
   section: {
     paddingHorizontal: 20,
-    marginBottom: 30,
+    marginBottom: 24,
+    backgroundColor: "#0a0a0a",
+    borderRadius: 12,
+    marginHorizontal: 20,
+    paddingVertical: 16,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    marginBottom: 16,
+    marginBottom: 12,
+    color: "#fff",
   },
   achievementsGrid: {
     flexDirection: "row",
@@ -377,27 +562,31 @@ const styles = StyleSheet.create({
   },
   achievementCard: {
     width: (width - 52) / 2,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: "#0a0a0a",
+    borderRadius: 8,
+    padding: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#333",
   },
   achievementEarned: {
-    backgroundColor: "rgba(255, 215, 0, 0.1)",
+    backgroundColor: "#1a1a1a",
     borderWidth: 1,
-    borderColor: "rgba(255, 215, 0, 0.3)",
+    borderColor: "#555",
   },
   achievementTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
-    marginTop: 8,
+    marginTop: 6,
     marginBottom: 4,
     textAlign: "center",
+    color: "#fff",
   },
   achievementDesc: {
-    fontSize: 12,
-    opacity: 0.7,
+    fontSize: 10,
+    color: "#888",
     textAlign: "center",
+    lineHeight: 12,
   },
   activityItem: {
     flexDirection: "row",
@@ -406,12 +595,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   activityIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#333",
   },
   activityInfo: {
     flex: 1,
@@ -419,19 +610,129 @@ const styles = StyleSheet.create({
   activityText: {
     fontSize: 14,
     marginBottom: 2,
+    color: "#fff",
   },
   activityTime: {
     fontSize: 12,
-    opacity: 0.6,
+    color: "#888",
   },
   quickAction: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#333",
   },
   quickActionText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: "500",
+    marginLeft: 12,
+    color: "#fff",
+  },
+  achievementToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+    marginBottom: 12,
+  },
+  achievementHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  achievementToggleText: {
+    fontSize: 13,
+    color: "#888",
+    fontWeight: "500",
+  },
+  profileImageContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileImagePlaceholder: {
+    fontSize: 30,
+  },
+  editableUserName: {
+    fontSize: 24,
+    fontWeight: "700",
+    marginBottom: 4,
+    color: "#fff",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  editableBio: {
+    fontSize: 14,
+    color: "#ccc",
+    lineHeight: 20,
+    marginBottom: 20,
+    fontWeight: "400",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: "#333",
+    minHeight: 80,
+  },
+  editButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+    justifyContent: "center",
+  },
+  cancelButton: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    flex: 1,
+    maxWidth: 120,
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+    textAlign: "center",
+  },
+  saveButton: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    flex: 1,
+    maxWidth: 120,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#000",
+    textAlign: "center",
+  },
+  profileImage: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
 });
