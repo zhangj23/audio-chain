@@ -38,6 +38,22 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Weave to access your camera to record videos for your groups.",
+          "microphonePermission": "Allow Weave to access your microphone to record videos with audio.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Weave to access your photo library to share videos.",
+          "savePhotosPermission": "Allow Weave to save videos to your photo library.",
+          "isAccessMediaLocationEnabled": true
+        }
       ]
     ],
     "experiments": {

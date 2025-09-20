@@ -3,7 +3,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
-  Dimensions,
   Alert,
   Modal,
 } from "react-native";
@@ -12,9 +11,10 @@ import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupDetail } from "@/components/group-detail";
 import { CreateGroupModal } from "@/components/create-group-modal";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { videoStorage } from "../../utils/videoStorage";
 
-const { width } = Dimensions.get("window");
+// const { width } = Dimensions.get("window"); // Unused for now
 
 // Mock group data
 const mockGroups = [
@@ -52,10 +52,25 @@ const mockGroups = [
 
 export default function HomeScreen() {
   const [groups, setGroups] = useState(mockGroups);
-  const [selectedGroup, setSelectedGroup] = useState(mockGroups[0]);
+  // const [selectedGroup, setSelectedGroup] = useState(mockGroups[0]); // Unused for now
   const [showGroupDetail, setShowGroupDetail] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [detailGroup, setDetailGroup] = useState<any>(null);
+  const [submittedVideos, setSubmittedVideos] = useState<{
+    [groupId: string]: any;
+  }>({});
+
+  // Subscribe to video storage changes
+  useEffect(() => {
+    const unsubscribe = videoStorage.subscribe((videos) => {
+      setSubmittedVideos(videos);
+    });
+
+    // Load initial videos
+    setSubmittedVideos(videoStorage.getAllVideos());
+
+    return unsubscribe;
+  }, []);
 
   const createNewGroup = () => {
     setShowCreateGroup(true);
@@ -78,8 +93,8 @@ export default function HomeScreen() {
       isRevealed: false,
     };
 
-    setGroups(prevGroups => [newGroup, ...prevGroups]);
-    
+    setGroups((prevGroups) => [newGroup, ...prevGroups]);
+
     Alert.alert(
       "Group Created! 🎉",
       `"${groupData.name}" has been created successfully!`,
@@ -126,92 +141,146 @@ export default function HomeScreen() {
         style={styles.groupsSection}
         showsVerticalScrollIndicator={false}
       >
-        {groups.map((group) => (
-          <TouchableOpacity
-            key={group.id}
-            style={styles.groupCard}
-            onPress={() => navigateToGroup(group)}
-          >
-            <View style={styles.groupContent}>
-              <View style={styles.groupHeader}>
-                <ThemedText style={styles.groupName}>{group.name}</ThemedText>
-                <ThemedText style={styles.groupTime}>
-                  {group.dueDate}
+        {groups.map((group) => {
+          const hasSubmittedVideo = submittedVideos[group.id];
+
+          return (
+            <TouchableOpacity
+              key={group.id}
+              style={styles.groupCard}
+              onPress={() => navigateToGroup(group)}
+            >
+              <View style={styles.groupContent}>
+                <View style={styles.groupHeader}>
+                  <ThemedText style={styles.groupName}>{group.name}</ThemedText>
+                  <View style={styles.groupHeaderRight}>
+                    <ThemedText style={styles.groupTime}>
+                      {group.dueDate}
+                    </ThemedText>
+                    {hasSubmittedVideo && (
+                      <View style={styles.submittedBadge}>
+                        <IconSymbol
+                          name="checkmark.circle.fill"
+                          size={16}
+                          color="#4CAF50"
+                        />
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <ThemedText style={styles.groupPrompt}>
+                  {group.prompt}
                 </ThemedText>
-              </View>
 
-              <ThemedText style={styles.groupPrompt}>{group.prompt}</ThemedText>
-
-              {/* Video Preview Section */}
-              <View style={styles.previewSection}>
-                {group.videosSubmitted > 0 ? (
-                  <View style={styles.videoPreviewContainer}>
-                    <View style={styles.videoPreviewGrid}>
-                      {Array.from({
-                        length: Math.min(group.videosSubmitted, 4),
-                      }).map((_, index) => (
-                        <View key={index} style={styles.videoThumbnail}>
-                          <View style={styles.blurredVideo}>
-                            <IconSymbol
-                              name="eye.slash.fill"
-                              size={12}
-                              color="#666"
-                            />
+                {/* Video Preview Section */}
+                <View style={styles.previewSection}>
+                  {group.videosSubmitted > 0 || hasSubmittedVideo ? (
+                    <View style={styles.videoPreviewContainer}>
+                      <View style={styles.videoPreviewGrid}>
+                        {/* Show user's own video if submitted */}
+                        {hasSubmittedVideo && (
+                          <View style={styles.videoThumbnail}>
+                            <View style={styles.userVideo}>
+                              <IconSymbol
+                                name="play.fill"
+                                size={12}
+                                color="#fff"
+                              />
+                            </View>
                           </View>
-                        </View>
-                      ))}
-                      {group.videosSubmitted > 4 && (
-                        <View style={styles.moreVideos}>
-                          <ThemedText style={styles.moreVideosText}>
-                            +{group.videosSubmitted - 4}
-                          </ThemedText>
-                        </View>
-                      )}
-                    </View>
-                    <ThemedText style={styles.previewText}>
-                      {group.isRevealed
-                        ? "Tap to watch all videos"
-                        : "Videos are hidden until everyone posts"}
-                    </ThemedText>
-                  </View>
-                ) : (
-                  <View style={styles.emptyPreviewContainer}>
-                    <View style={styles.emptyPreviewIcon}>
-                      <IconSymbol name="camera" size={24} color="#444" />
-                    </View>
-                    <ThemedText style={styles.emptyPreviewText}>
-                      {group.members.includes("You")
-                        ? "Be the first to post! 🚀"
-                        : "Waiting for the first video..."}
-                    </ThemedText>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.groupStats}>
-                <ThemedText style={styles.statsText}>
-                  {group.videosSubmitted}/{group.totalMembers} posted
-                </ThemedText>
-                <View style={styles.rightSection}>
-                  {group.videosSubmitted < group.totalMembers && (
-                    <View style={styles.pendingIndicator}>
-                      <ThemedText style={styles.pendingText}>
-                        pending
+                        )}
+                        {/* Show blurred thumbnails for other submitted videos only if group not revealed */}
+                        {!group.isRevealed &&
+                          Array.from({
+                            length: Math.min(
+                              group.videosSubmitted,
+                              hasSubmittedVideo ? 3 : 4
+                            ),
+                          }).map((_, index) => (
+                            <View key={index} style={styles.videoThumbnail}>
+                              <View style={styles.blurredVideo}>
+                                <IconSymbol
+                                  name="eye.slash.fill"
+                                  size={12}
+                                  color="#666"
+                                />
+                              </View>
+                            </View>
+                          ))}
+                        {/* Show clear thumbnails if group is revealed */}
+                        {group.isRevealed &&
+                          Array.from({
+                            length: Math.min(
+                              group.videosSubmitted,
+                              hasSubmittedVideo ? 3 : 4
+                            ),
+                          }).map((_, index) => (
+                            <View key={index} style={styles.videoThumbnail}>
+                              <View style={styles.revealedVideo}>
+                                <IconSymbol
+                                  name="play.fill"
+                                  size={12}
+                                  color="#fff"
+                                />
+                              </View>
+                            </View>
+                          ))}
+                        {group.videosSubmitted > 4 && (
+                          <View style={styles.moreVideos}>
+                            <ThemedText style={styles.moreVideosText}>
+                              +{group.videosSubmitted - 4}
+                            </ThemedText>
+                          </View>
+                        )}
+                      </View>
+                      <ThemedText style={styles.previewText}>
+                        {group.isRevealed
+                          ? "Tap to watch all videos"
+                          : hasSubmittedVideo
+                          ? "Your video submitted! Others hidden until everyone posts"
+                          : "Videos are hidden until everyone posts"}
                       </ThemedText>
                     </View>
-                  )}
-                  {group.isRevealed && (
-                    <View style={styles.revealedBadge}>
-                      <ThemedText style={styles.revealedText}>
-                        ⚡ Ready to view
+                  ) : (
+                    <View style={styles.emptyPreviewContainer}>
+                      <View style={styles.emptyPreviewIcon}>
+                        <IconSymbol name="camera" size={24} color="#444" />
+                      </View>
+                      <ThemedText style={styles.emptyPreviewText}>
+                        {group.members.includes("You")
+                          ? "Be the first to post! 🚀"
+                          : "Waiting for the first video..."}
                       </ThemedText>
                     </View>
                   )}
                 </View>
+
+                <View style={styles.groupStats}>
+                  <ThemedText style={styles.statsText}>
+                    {group.videosSubmitted}/{group.totalMembers} posted
+                  </ThemedText>
+                  <View style={styles.rightSection}>
+                    {group.videosSubmitted < group.totalMembers && (
+                      <View style={styles.pendingIndicator}>
+                        <ThemedText style={styles.pendingText}>
+                          pending
+                        </ThemedText>
+                      </View>
+                    )}
+                    {group.isRevealed && (
+                      <View style={styles.revealedBadge}>
+                        <ThemedText style={styles.revealedText}>
+                          ⚡ Ready to view
+                        </ThemedText>
+                      </View>
+                    )}
+                  </View>
+                </View>
               </View>
-            </View>
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          );
+        })}
 
         {/* Create New Group - BeReal Style */}
         <TouchableOpacity
@@ -244,6 +313,7 @@ export default function HomeScreen() {
               setShowGroupDetail(false);
               viewCompletedGroup(group);
             }}
+            submittedVideo={submittedVideos[detailGroup.id] || null}
           />
         )}
       </Modal>
@@ -455,5 +525,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#888",
     fontWeight: "500",
+  },
+  groupHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  submittedBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(76, 175, 80, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  userVideo: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#333",
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  revealedVideo: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#444",
+    borderRadius: 4,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
