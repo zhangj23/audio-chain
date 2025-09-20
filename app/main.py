@@ -12,7 +12,7 @@ from app.models import user, group, video, prompt
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Audio Chain API",
+    title="Weave API",
     description="Social app for creating weekly video compilations from friend groups",
     version="1.0.0"
 )
@@ -37,7 +37,7 @@ app.include_router(prompts.router, prefix="/prompts", tags=["prompts"])
 
 @app.get("/")
 async def root():
-    return {"message": "Audio Chain API is running!"}
+    return {"message": "Weave API is running!"}
 
 @app.get("/health")
 async def health_check():
