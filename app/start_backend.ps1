@@ -57,4 +57,6 @@ Write-Host ""
 Write-Host "Press Ctrl+C to stop the server" -ForegroundColor Yellow
 Write-Host ""
 
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Change to parent directory to run the server
+cd ..
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
