@@ -24,20 +24,26 @@ pip install -r requirements.txt
 Copy `env.example` to `.env` and configure your environment variables:
 
 ```bash
+# Windows
+copy env.example .env
+
+# Mac/Linux  
 cp env.example .env
 ```
 
 Update the following variables in `.env`:
 
-- `DATABASE_URL`: Your PostgreSQL connection string
+- `DATABASE_URL`: Your database connection string (SQLite for development)
 - `SECRET_KEY`: JWT secret key
-- `AWS_ACCESS_KEY_ID`: Your AWS access key
-- `AWS_SECRET_ACCESS_KEY`: Your AWS secret key
+- `AWS_ACCESS_KEY_ID`: Your AWS access key (for S3)
+- `AWS_SECRET_ACCESS_KEY`: Your AWS secret key (for S3)
 - `AWS_BUCKET_NAME`: Your S3 bucket name
 
 ### 3. Database Setup
 
-The application will automatically create tables on startup. Make sure your PostgreSQL database is running and accessible.
+The application uses SQLite by default for development. The database will be created automatically when you first run the application.
+
+For production, you can switch to PostgreSQL by updating the `DATABASE_URL` in your `.env` file.
 
 ### 4. AWS S3 Setup
 

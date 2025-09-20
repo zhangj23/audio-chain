@@ -33,7 +33,7 @@ python -m pip install --upgrade pip
 
 # Install requirements
 Write-Host "Installing requirements..." -ForegroundColor Yellow
-pip install -r requirements-simple.txt
+pip install -r requirements.txt
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error: Failed to install requirements" -ForegroundColor Red
     Read-Host "Press Enter to exit"
