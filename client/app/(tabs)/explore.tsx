@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useState } from "react";
 
@@ -63,6 +64,7 @@ const recentActivity = [
 
 export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
+  const router = useRouter();
 
   const editProfile = () => {
     setIsEditing(!isEditing);
@@ -84,7 +86,7 @@ export default function ProfileScreen() {
   };
 
   const openSettings = () => {
-    Alert.alert("Settings", "Settings page coming soon!");
+    router.push("/settings");
   };
 
   const renderStats = () => (
