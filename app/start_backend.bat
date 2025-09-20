@@ -31,7 +31,7 @@ python -m pip install --upgrade pip
 
 REM Install requirements
 echo Installing requirements...
-pip install -r requirements-simple.txt
+pip install -r requirements.txt
 if errorlevel 1 (
     echo Error: Failed to install requirements
     pause

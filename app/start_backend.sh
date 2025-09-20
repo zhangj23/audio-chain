@@ -31,7 +31,7 @@ python -m pip install --upgrade pip
 
 # Install requirements
 echo "Installing requirements..."
-pip install -r requirements-simple.txt
+pip install -r requirements.txt
 if [ $? -ne 0 ]; then
     echo "Error: Failed to install requirements"
     exit 1
