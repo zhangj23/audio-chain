@@ -19,3 +19,4 @@ class User(Base):
     group_memberships = relationship("GroupMember", back_populates="user")
     video_submissions = relationship("VideoSubmission", back_populates="user")
     created_groups = relationship("Group", back_populates="creator")
+    sent_invites = relationship("GroupPendingRequest", foreign_keys="GroupPendingRequest.invited_by", back_populates="inviter")

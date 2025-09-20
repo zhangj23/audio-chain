@@ -18,6 +18,7 @@ class Group(Base):
     # Relationships
     creator = relationship("User", back_populates="created_groups")
     members = relationship("GroupMember", back_populates="group")
+    pending_requests = relationship("GroupPendingRequest", back_populates="group")
     video_submissions = relationship("VideoSubmission", back_populates="group")
     weekly_compilations = relationship("WeeklyCompilation", back_populates="group")
 
@@ -33,3 +34,18 @@ class GroupMember(Base):
     # Relationships
     user = relationship("User", back_populates="group_memberships")
     group = relationship("Group", back_populates="members")
+
+class GroupPendingRequest(Base):
+    __tablename__ = "group_pending_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+    invited_username = Column(String, nullable=False)  # Username of invited user
+    invited_by = Column(Integer, ForeignKey("users.id"), nullable=False)  # Who sent the invite
+    status = Column(String, default="pending")  # pending, accepted, declined, expired
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime, nullable=True)  # Optional expiration date
+
+    # Relationships
+    group = relationship("Group", back_populates="pending_requests")
+    inviter = relationship("User", foreign_keys=[invited_by])
