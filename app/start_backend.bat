@@ -55,6 +55,9 @@ echo API Documentation: http://localhost:8000/docs
 echo.
 echo Press Ctrl+C to stop the server
 echo.
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+REM Change to parent directory to run the server
+cd ..
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 pause
