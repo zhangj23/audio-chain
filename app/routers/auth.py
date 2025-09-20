@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse, UserLogin, Token
+from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, DeleteAccountRequest
 from app.auth import (
     get_password_hash, 
     authenticate_user, 
@@ -65,3 +65,58 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.delete("/account")
+async def delete_account(
+    request: DeleteAccountRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete user account and all associated data
+    """
+    from app.auth import verify_password
+    
+    # Verify password before deletion
+    if not verify_password(request.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password"
+        )
+    
+    try:
+        # Delete user's video submissions
+        from app.models.video import VideoSubmission
+        db.query(VideoSubmission).filter(VideoSubmission.user_id == current_user.id).delete()
+        
+        # Delete user's group memberships
+        from app.models.group import GroupMember
+        db.query(GroupMember).filter(GroupMember.user_id == current_user.id).delete()
+        
+        # Delete user's groups (if they are the owner)
+        from app.models.group import Group
+        user_groups = db.query(Group).filter(Group.owner_id == current_user.id).all()
+        for group in user_groups:
+            # Delete all members of groups owned by this user
+            db.query(GroupMember).filter(GroupMember.group_id == group.id).delete()
+            # Delete the group
+            db.delete(group)
+        
+        # Delete user's weekly compilations
+        from app.models.video import WeeklyCompilation
+        db.query(WeeklyCompilation).filter(WeeklyCompilation.group_id.in_(
+            [g.id for g in user_groups]
+        )).delete()
+        
+        # Finally, delete the user
+        db.delete(current_user)
+        db.commit()
+        
+        return {"message": "Account deleted successfully"}
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete account: {str(e)}"
+        )
