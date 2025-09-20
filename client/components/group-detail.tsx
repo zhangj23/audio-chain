@@ -5,11 +5,14 @@ import {
   Dimensions,
   Alert,
   ScrollView,
+  Modal,
 } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useState } from "react";
+import { GroupSettings } from "@/components/group-settings";
+import { useState, useRef } from "react";
+import { Video } from "expo-av";
 
 const { width } = Dimensions.get("window");
 
@@ -27,6 +30,11 @@ interface GroupDetailProps {
   onBack: () => void;
   onRecord: (groupId: string) => void;
   onWatchVideos: (group: any) => void;
+  submittedVideo?: {
+    uri: string;
+    duration: number;
+    timestamp: number;
+  } | null;
 }
 
 export function GroupDetail({
@@ -34,80 +42,184 @@ export function GroupDetail({
   onBack,
   onRecord,
   onWatchVideos,
+  submittedVideo,
 }: GroupDetailProps) {
-  const [showInviteOptions, setShowInviteOptions] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false);
+  const [currentVideoUri, setCurrentVideoUri] = useState<string | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoRef = useRef<Video>(null);
 
-  const inviteFriends = () => {
-    Alert.alert("Invite Friends", "Share this group with your friends!", [
-      { text: "Copy Link", onPress: () => console.log("Copy link") },
-      { text: "Share", onPress: () => console.log("Share group") },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  const openSettings = () => {
+    setShowSettings(true);
   };
 
-  const leaveGroup = () => {
-    Alert.alert(
-      "Leave Group",
-      `Are you sure you want to leave "${group.name}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Leave",
-          style: "destructive",
-          onPress: () => console.log("Leave group"),
-        },
-      ]
+  const handleSettingsSave = (updates: any) => {
+    console.log("Settings updated:", updates);
+    setShowSettings(false);
+  };
+
+  const openVideoPlayer = (videoUri: string) => {
+    setCurrentVideoUri(videoUri);
+    setShowVideoPlayer(true);
+    setIsVideoPlaying(false);
+  };
+
+  const closeVideoPlayer = () => {
+    setShowVideoPlayer(false);
+    setCurrentVideoUri(null);
+    setIsVideoPlaying(false);
+    if (videoRef.current) {
+      videoRef.current.pauseAsync();
+    }
+  };
+
+  const toggleVideoPlayback = async () => {
+    if (videoRef.current) {
+      if (isVideoPlaying) {
+        await videoRef.current.pauseAsync();
+        setIsVideoPlaying(false);
+      } else {
+        await videoRef.current.playAsync();
+        setIsVideoPlaying(true);
+      }
+    }
+  };
+
+  const replayVideo = async () => {
+    if (videoRef.current) {
+      await videoRef.current.replayAsync();
+      setIsVideoPlaying(true);
+    }
+  };
+
+  const getGridDimensions = () => {
+    const memberCount = group.members.length;
+    const screenWidth = width - 40; // Account for padding
+
+    if (memberCount <= 2) {
+      return {
+        columns: memberCount,
+        tileWidth: (screenWidth - 12) / memberCount,
+      };
+    } else if (memberCount <= 4) {
+      return { columns: 2, tileWidth: (screenWidth - 12) / 2 };
+    } else {
+      return { columns: 3, tileWidth: (screenWidth - 24) / 3 };
+    }
+  };
+
+  const renderMemberGrid = () => {
+    const { columns, tileWidth } = getGridDimensions();
+
+    return (
+      <View style={styles.videoGrid}>
+        {group.members.map((member, index) => {
+          const hasSubmitted = index < group.videosSubmitted;
+          const isYou = member === "You";
+
+          // Only allow viewing your own video, or any video if group is revealed
+          const userHasSubmittedVideo = isYou && submittedVideo;
+          const canViewVideo =
+            (isYou && userHasSubmittedVideo) ||
+            (group.isRevealed && hasSubmitted);
+          const actuallyHasSubmitted = hasSubmitted || userHasSubmittedVideo;
+
+          return (
+            <View key={index} style={[styles.videoTile, { width: tileWidth }]}>
+              {/* Video Content */}
+              <TouchableOpacity
+                style={styles.videoContainer}
+                onPress={() => {
+                  if (actuallyHasSubmitted && canViewVideo) {
+                    if (userHasSubmittedVideo && submittedVideo) {
+                      // Play the user's own submitted video
+                      openVideoPlayer(submittedVideo.uri);
+                    } else if (group.isRevealed && hasSubmitted) {
+                      // Play other members' videos only if group is revealed
+                      console.log(`Play ${member}'s video`);
+                      // TODO: In a real app, this would play the actual video from storage
+                    }
+                  } else if (!actuallyHasSubmitted && isYou) {
+                    // Record new video if user hasn't submitted yet
+                    onRecord(group.id);
+                  }
+                }}
+              >
+                <View style={styles.videoContent}>
+                  {actuallyHasSubmitted ? (
+                    <>
+                      {/* Video Background */}
+                      <View
+                        style={[
+                          styles.videoBackground,
+                          !canViewVideo && styles.blurredBackground,
+                        ]}
+                      >
+                        <IconSymbol
+                          name={canViewVideo ? "play.fill" : "eye.slash.fill"}
+                          size={24}
+                          color={canViewVideo ? "#fff" : "#666"}
+                        />
+                      </View>
+
+                      {/* Blur overlay for non-viewable videos */}
+                      {!canViewVideo && (
+                        <View style={styles.videoBlur}>
+                          <IconSymbol name="lock.fill" size={12} color="#888" />
+                        </View>
+                      )}
+
+                      {/* Play indicator - only for viewable videos */}
+                      {canViewVideo && (
+                        <View style={styles.playIndicator}>
+                          <IconSymbol
+                            name="play.circle.fill"
+                            size={32}
+                            color="rgba(255,255,255,0.9)"
+                          />
+                        </View>
+                      )}
+
+                      {/* Your video indicator */}
+                      {userHasSubmittedVideo && (
+                        <View style={styles.yourVideoIndicator}>
+                          <ThemedText style={styles.yourVideoText}>
+                            {submittedVideo?.duration}s
+                          </ThemedText>
+                        </View>
+                      )}
+                    </>
+                  ) : (
+                    <View style={styles.emptyVideo}>
+                      {isYou ? (
+                        <>
+                          <IconSymbol name="plus" size={20} color="#666" />
+                          <ThemedText style={styles.addVideoText}>
+                            Add
+                          </ThemedText>
+                        </>
+                      ) : (
+                        <IconSymbol name="clock" size={20} color="#444" />
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                {/* Member name */}
+                <View style={styles.memberLabel}>
+                  <ThemedText style={styles.memberName} numberOfLines={1}>
+                    {isYou ? "You" : member.split(" ")[0]}
+                  </ThemedText>
+                  {actuallyHasSubmitted && <View style={styles.statusDot} />}
+                </View>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+      </View>
     );
   };
-
-  const renderMemberGrid = () => (
-    <View style={styles.membersGrid}>
-      {group.members.map((member, index) => (
-        <View key={index} style={styles.memberCard}>
-          <View
-            style={[
-              styles.memberAvatar,
-              index < group.videosSubmitted
-                ? styles.completedAvatar
-                : styles.pendingAvatar,
-            ]}
-          >
-            {index < group.videosSubmitted ? (
-              group.isRevealed ? (
-                <TouchableOpacity
-                  onPress={() => console.log(`Play ${member}'s video`)}
-                >
-                  <IconSymbol name="play.fill" size={24} color="#fff" />
-                </TouchableOpacity>
-              ) : (
-                <IconSymbol name="checkmark" size={20} color="#fff" />
-              )
-            ) : member === "You" ? (
-              <IconSymbol name="camera.fill" size={20} color="#666" />
-            ) : (
-              <IconSymbol name="clock" size={20} color="#666" />
-            )}
-          </View>
-          <ThemedText style={styles.memberName}>{member}</ThemedText>
-          {member === "You" && index >= group.videosSubmitted && (
-            <TouchableOpacity
-              style={styles.recordButton}
-              onPress={() => onRecord(group.id)}
-            >
-              <ThemedText style={styles.recordButtonText}>
-                Record Now
-              </ThemedText>
-            </TouchableOpacity>
-          )}
-          {group.isRevealed && index < group.videosSubmitted && (
-            <TouchableOpacity style={styles.playButton}>
-              <ThemedText style={styles.playButtonText}>Watch</ThemedText>
-            </TouchableOpacity>
-          )}
-        </View>
-      ))}
-    </View>
-  );
 
   return (
     <ThemedView style={styles.container}>
@@ -117,11 +229,8 @@ export function GroupDetail({
           <IconSymbol name="chevron.left" size={24} color="#fff" />
         </TouchableOpacity>
         <ThemedText style={styles.headerTitle}>{group.name}</ThemedText>
-        <TouchableOpacity
-          style={styles.moreButton}
-          onPress={() => setShowInviteOptions(!showInviteOptions)}
-        >
-          <IconSymbol name="ellipsis" size={24} color="#fff" />
+        <TouchableOpacity style={styles.moreButton} onPress={openSettings}>
+          <IconSymbol name="ellipsis" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -158,7 +267,7 @@ export function GroupDetail({
         {/* Members */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>
-            Members ({group.totalMembers})
+            {group.totalMembers} members
           </ThemedText>
           {renderMemberGrid()}
         </View>
@@ -186,45 +295,102 @@ export function GroupDetail({
               </ThemedText>
             </View>
           )}
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={inviteFriends}
-          >
-            <IconSymbol name="person.badge.plus" size={20} color="#007AFF" />
-            <ThemedText style={styles.secondaryButtonText}>
-              Invite Friends
-            </ThemedText>
-          </TouchableOpacity>
-        </View>
-
-        {/* Group Settings */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Group Settings</ThemedText>
-
-          <TouchableOpacity style={styles.settingItem}>
-            <IconSymbol name="bell" size={20} color="#666" />
-            <ThemedText style={styles.settingText}>Notifications</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.settingItem}>
-            <IconSymbol name="clock.arrow.circlepath" size={20} color="#666" />
-            <ThemedText style={styles.settingText}>Change Deadline</ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#666" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.settingItem, styles.dangerItem]}
-            onPress={leaveGroup}
-          >
-            <IconSymbol name="arrow.right.square" size={20} color="#ff4444" />
-            <ThemedText style={[styles.settingText, styles.dangerText]}>
-              Leave Group
-            </ThemedText>
-          </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Video Player Modal */}
+      <Modal
+        visible={showVideoPlayer}
+        animationType="fade"
+        presentationStyle="fullScreen"
+      >
+        <ThemedView style={styles.videoPlayerContainer}>
+          {/* Video Player Header */}
+          <View style={styles.videoPlayerHeader}>
+            <TouchableOpacity
+              onPress={closeVideoPlayer}
+              style={styles.closeVideoButton}
+            >
+              <IconSymbol name="xmark" size={24} color="#fff" />
+            </TouchableOpacity>
+            <ThemedText style={styles.videoPlayerTitle}>Your Video</ThemedText>
+            <View style={styles.placeholder} />
+          </View>
+
+          {/* Video Player */}
+          <View style={styles.videoPlayerContent}>
+            {currentVideoUri && (
+              <Video
+                ref={videoRef}
+                source={{ uri: currentVideoUri }}
+                style={styles.video}
+                useNativeControls={false}
+                resizeMode="cover"
+                isLooping={false}
+                onPlaybackStatusUpdate={(status) => {
+                  if (status.isLoaded && status.didJustFinish) {
+                    setIsVideoPlaying(false);
+                  }
+                }}
+              />
+            )}
+
+            {/* Video Controls Overlay */}
+            <TouchableOpacity
+              style={styles.videoControlsOverlay}
+              onPress={toggleVideoPlayback}
+            >
+              {!isVideoPlaying && (
+                <View style={styles.playButton}>
+                  <IconSymbol name="play.fill" size={48} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Video Info */}
+            <View style={styles.videoInfo}>
+              <ThemedText style={styles.videoGroup}>{group.name}</ThemedText>
+              {submittedVideo && (
+                <ThemedText style={styles.videoDuration}>
+                  {submittedVideo.duration}s
+                </ThemedText>
+              )}
+            </View>
+          </View>
+
+          {/* Video Player Actions */}
+          <View style={styles.videoPlayerActions}>
+            <TouchableOpacity
+              style={styles.videoActionButton}
+              onPress={replayVideo}
+            >
+              <IconSymbol name="arrow.clockwise" size={24} color="#fff" />
+              <ThemedText style={styles.videoActionText}>Replay</ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.videoActionButton}
+              onPress={closeVideoPlayer}
+            >
+              <IconSymbol name="checkmark" size={24} color="#fff" />
+              <ThemedText style={styles.videoActionText}>Done</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </ThemedView>
+      </Modal>
+
+      {/* Settings Modal */}
+      <Modal
+        visible={showSettings}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <GroupSettings
+          group={group}
+          onBack={() => setShowSettings(false)}
+          onSave={handleSettingsSave}
+        />
+      </Modal>
     </ThemedView>
   );
 }
@@ -232,6 +398,7 @@ export function GroupDetail({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#000",
   },
   header: {
     flexDirection: "row",
@@ -240,12 +407,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 60,
     paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1a1a1a",
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#fff",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -254,12 +423,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flex: 1,
     textAlign: "center",
+    color: "#fff",
   },
   moreButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#333",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -269,33 +439,34 @@ const styles = StyleSheet.create({
   groupInfo: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+    borderBottomColor: "#1a1a1a",
   },
   prompt: {
-    fontSize: 18,
-    fontStyle: "italic",
+    fontSize: 16,
     textAlign: "center",
     marginBottom: 20,
-    opacity: 0.9,
+    color: "#ccc",
+    fontWeight: "400",
   },
   progressContainer: {
     marginBottom: 16,
   },
   progressBar: {
-    height: 8,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 4,
+    height: 4,
+    backgroundColor: "#333",
+    borderRadius: 2,
     marginBottom: 8,
   },
   progressFill: {
     height: "100%",
-    backgroundColor: "#4CAF50",
-    borderRadius: 4,
+    backgroundColor: "#fff",
+    borderRadius: 2,
   },
   progressText: {
-    fontSize: 14,
+    fontSize: 12,
     textAlign: "center",
-    opacity: 0.8,
+    color: "#888",
+    fontWeight: "500",
   },
   dueDateContainer: {
     flexDirection: "row",
@@ -304,69 +475,95 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   dueDate: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ff9500",
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#888",
   },
   section: {
     padding: 20,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     marginBottom: 16,
+    color: "#fff",
   },
-  membersGrid: {
+  videoGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    gap: 12,
   },
-  memberCard: {
-    width: (width - 60) / 2,
-    alignItems: "center",
-    marginBottom: 20,
+  videoTile: {
+    marginBottom: 12,
   },
-  memberAvatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+  videoContainer: {
+    flex: 1,
+  },
+  videoContent: {
+    aspectRatio: 9 / 16,
+    borderRadius: 12,
+    overflow: "hidden",
+    position: "relative",
+    marginBottom: 8,
+  },
+  videoBackground: {
+    flex: 1,
+    backgroundColor: "#333",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
   },
-  completedAvatar: {
-    backgroundColor: "#4CAF50",
+  blurredBackground: {
+    backgroundColor: "#222",
   },
-  pendingAvatar: {
-    backgroundColor: "rgba(255,255,255,0.1)",
+  videoBlur: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playIndicator: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyVideo: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 4,
+  },
+  addVideoText: {
+    fontSize: 10,
+    color: "#666",
+    fontWeight: "500",
+  },
+  memberLabel: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
   },
   memberName: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#fff",
     textAlign: "center",
   },
-  recordButton: {
-    backgroundColor: "#007AFF",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  recordButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  playButton: {
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: "#4CAF50",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  playButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#fff",
   },
   actionSection: {
     padding: 20,
@@ -415,23 +612,117 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     textAlign: "center",
   },
-  settingItem: {
+  yourVideoIndicator: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "rgba(76, 175, 80, 0.9)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  yourVideoText: {
+    fontSize: 10,
+    color: "#fff",
+    fontWeight: "600",
+  },
+  // Video Player Modal Styles
+  videoPlayerContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  videoPlayerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    gap: 12,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
-  settingText: {
-    fontSize: 16,
+  closeVideoButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  videoPlayerTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  placeholder: {
+    width: 44,
+    height: 44,
+  },
+  videoPlayerContent: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
   },
-  dangerItem: {
-    marginTop: 20,
-    paddingTop: 20,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.1)",
+  video: {
+    width: "100%",
+    height: "100%",
   },
-  dangerText: {
-    color: "#ff4444",
+  videoControlsOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  playButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  videoInfo: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  videoGroup: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  videoDuration: {
+    fontSize: 14,
+    color: "#fff",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontWeight: "600",
+  },
+  videoPlayerActions: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: 40,
+    paddingVertical: 30,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+  },
+  videoActionButton: {
+    alignItems: "center",
+    gap: 8,
+  },
+  videoActionText: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "500",
   },
 });

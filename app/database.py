@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./audiochain.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./weave.db")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

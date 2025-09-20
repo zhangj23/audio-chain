@@ -7,7 +7,7 @@ class AWSConfig:
         self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
         self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.aws_region = os.getenv("AWS_REGION", "us-east-1")
-        self.bucket_name = os.getenv("AWS_BUCKET_NAME", "audio-chain-videos")
+        self.bucket_name = os.getenv("AWS_BUCKET_NAME", "weave-videos")
         
         # Initialize S3 client
         self.s3_client = boto3.client(

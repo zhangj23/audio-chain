@@ -1,6 +1,6 @@
-# Audio Chain Backend API
+# Weave Backend API
 
-A FastAPI backend for the Audio Chain social app that creates weekly video compilations from friend groups.
+A FastAPI backend for the Weave social app that creates weekly video compilations from friend groups.
 
 ## Features
 
@@ -27,7 +27,7 @@ Copy `env.example` to `.env` and configure your environment variables:
 # Windows
 copy env.example .env
 
-# Mac/Linux  
+# Mac/Linux
 cp env.example .env
 ```
 
