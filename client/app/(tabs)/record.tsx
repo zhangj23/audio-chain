@@ -75,7 +75,7 @@ export default function RecordScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   // Note: Video storage is now handled by shared videoStorage utility
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const videoRef = useRef<Video>(null);
 
@@ -356,35 +356,40 @@ export default function RecordScreen() {
 
       // Create FormData for the video file
       const formData = new FormData();
-      
+
       // For React Native, we need to create a file object from the URI
       const videoFile = {
         uri: recordedVideoUri,
-        type: 'video/mp4',
+        type: "video/mp4",
         name: `video_${Date.now()}.mp4`,
       } as any;
-      
-      formData.append('video', videoFile);
-      formData.append('group_id', selectedGroupId);
-      formData.append('duration', recordingTime.toString());
+
+      formData.append("video", videoFile);
+      formData.append("group_id", selectedGroupId);
+      formData.append("duration", recordingTime.toString());
 
       // Upload to backend
-      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://129.161.69.14:8000'}/videos/upload`, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          // Add auth token if available
-          ...(await getAuthHeaders()),
-        },
-      });
+      const response = await fetch(
+        `${
+          process.env.EXPO_PUBLIC_API_URL || "http://129.161.69.14:8000"
+        }/videos/upload`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            "Content-Type": "multipart/form-data",
+            // Add auth token if available
+            ...(await getAuthHeaders()),
+          },
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Upload failed: ${response.status}`);
       }
 
       const result = await response.json();
-      
+
       // Also store locally for offline access
       videoStorage.addVideo(selectedGroupId, {
         uri: recordedVideoUri,
