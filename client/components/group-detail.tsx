@@ -6,6 +6,8 @@ import {
   ScrollView,
   Modal,
   Alert,
+  StatusBar,
+  SafeAreaView,
 } from "react-native";
 import { useState, useRef, useEffect } from "react";
 import { ThemedText } from "@/components/themed-text";
@@ -13,10 +15,10 @@ import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupSettings } from "@/components/group-settings";
 import { InviteModal } from "@/components/invite-modal";
-import { Video } from "expo-av";
+import { Video, ResizeMode } from "expo-av";
 import { apiService } from "@/services/api";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
 
 interface GroupDetailProps {
   group: {
@@ -1039,15 +1041,13 @@ export function GroupDetail({
       <Modal
         visible={showVideoPlayer}
         animationType="fade"
-        presentationStyle="fullScreen"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent={true}
+        hardwareAccelerated={true}
+        transparent={false}
       >
-        {console.log(
-          "Video Player Modal - visible:",
-          showVideoPlayer,
-          "currentVideoUri:",
-          currentVideoUri
-        )}
-        <ThemedView style={styles.videoPlayerContainer}>
+        <View style={styles.videoPlayerContainer}>
+          <StatusBar hidden={true} />
           {/* Video Player Header */}
           <View style={styles.videoPlayerHeader}>
             <TouchableOpacity
@@ -1069,6 +1069,8 @@ export function GroupDetail({
                 style={styles.video}
                 useNativeControls={false}
                 isLooping={false}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={isVideoPlaying}
                 onPlaybackStatusUpdate={(status) => {
                   if (status.isLoaded && status.didJustFinish) {
                     setIsVideoPlaying(false);
@@ -1118,7 +1120,7 @@ export function GroupDetail({
               <ThemedText style={styles.videoActionText}>Done</ThemedText>
             </TouchableOpacity>
           </View>
-        </ThemedView>
+        </View>
       </Modal>
 
       {/* Settings Modal */}
@@ -1690,14 +1692,25 @@ const styles = StyleSheet.create({
   videoPlayerContainer: {
     flex: 1,
     backgroundColor: "#000",
+    width: width,
+    height: height,
+    position: "absolute",
+    top: 0,
+    left: 0,
   },
   videoPlayerHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 50,
     paddingBottom: 20,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   closeVideoButton: {
     width: 44,
@@ -1720,11 +1733,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    position: "relative",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: width,
+    height: height,
+    zIndex: 1,
   },
   video: {
-    width: "100%",
-    height: "100%",
+    width: width,
+    height: height,
+    backgroundColor: "#000",
   },
   videoControlsOverlay: {
     position: "absolute",
@@ -1745,12 +1764,17 @@ const styles = StyleSheet.create({
   },
   videoInfo: {
     position: "absolute",
-    bottom: 20,
+    top: 100,
     left: 20,
     right: 20,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    zIndex: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
   videoGroup: {
     fontSize: 16,
@@ -1775,6 +1799,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingVertical: 30,
     backgroundColor: "rgba(0, 0, 0, 0.9)",
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
   videoActionButton: {
     alignItems: "center",
