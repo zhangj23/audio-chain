@@ -55,7 +55,11 @@ export default function HomeScreen() {
   }) => {
     try {
       console.log("HomeScreen - Creating group with data:", groupData);
-      const newGroup = await createGroup(groupData.name, groupData.prompt);
+      const newGroup = await createGroup(
+        groupData.name,
+        groupData.prompt,
+        groupData.deadline
+      );
       console.log("HomeScreen - Group created successfully:", newGroup);
       setShowCreateModal(false);
     } catch (error) {
@@ -91,14 +95,15 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <StatusBar style="light" />
+      {/* StatusBar handled at root */}
       <ScrollView
         style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Header */}
+        {/* Header inside scroll so it scrolls with content */}
         <View style={styles.header}>
           <ThemedText style={styles.title}>Your Groups</ThemedText>
           <TouchableOpacity
@@ -141,6 +146,11 @@ export default function HomeScreen() {
                 <ThemedText style={styles.groupDescription}>
                   {group.description || "No description"}
                 </ThemedText>
+                {group.deadline_at && (
+                  <ThemedText style={styles.groupDeadline}>
+                    Deadline: {new Date(group.deadline_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
+                  </ThemedText>
+                )}
                 <View style={styles.groupStats}>
                   <View style={styles.stat}>
                     <IconSymbol name="person.2" size={14} color="#8E8E93" />
@@ -248,7 +258,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 20,
     marginBottom: 10, // Add bottom margin for better spacing
   },
@@ -319,6 +329,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8E8E93",
     marginBottom: 12,
+  },
+  groupDeadline: {
+    fontSize: 12,
+    color: "#ccc",
+    marginTop: -4,
+    marginBottom: 8,
   },
   groupStats: {
     flexDirection: "row",

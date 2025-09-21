@@ -19,7 +19,7 @@ interface GroupsContextType {
   isLoading: boolean;
   error: string | null;
   refreshGroups: () => Promise<void>;
-  createGroup: (name: string, description?: string) => Promise<Group>;
+  createGroup: (name: string, description?: string, deadline_at?: string) => Promise<Group>;
   joinGroup: (groupId: number) => Promise<void>;
   leaveGroup: (groupId: number) => Promise<void>;
   getGroupSubmissions: (groupId: number) => Promise<VideoSubmission[]>;
@@ -95,7 +95,8 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
 
   const createGroup = async (
     name: string,
-    description?: string
+    description?: string,
+    deadline_at?: string
   ): Promise<Group> => {
     try {
       console.log("GroupsContext - createGroup called with:", {
@@ -103,7 +104,7 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
         description,
       });
       setError(null);
-      const newGroup = await apiService.createGroup(name, description);
+      const newGroup = await apiService.createGroup(name, description, deadline_at);
       setGroups((prev) => [newGroup, ...prev]);
       console.log("GroupsContext - Groups updated with new group:", newGroup);
       return newGroup;

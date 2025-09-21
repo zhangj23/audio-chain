@@ -49,7 +49,8 @@ async def create_group(
         name=group.name,
         description=group.description,
         invite_code=invite_code,
-        created_by=current_user.id
+        created_by=current_user.id,
+        deadline_at=getattr(group, 'deadline_at', None)
     )
     db.add(db_group)
     db.commit()
@@ -116,6 +117,7 @@ async def create_group(
         id=db_group.id,
         name=db_group.name,
         description=db_group.description,
+        deadline_at=db_group.deadline_at,
         invite_code=db_group.invite_code,
         created_by=db_group.created_by,
         is_active=db_group.is_active,
@@ -217,6 +219,7 @@ async def get_my_groups(
             id=group.id,
             name=group.name,
             description=group.description,
+            deadline_at=group.deadline_at,
             invite_code=group.invite_code,
             created_by=group.created_by,
             is_active=group.is_active,
@@ -322,6 +325,7 @@ async def get_group(
         id=group.id,
         name=group.name,
         description=group.description,
+        deadline_at=group.deadline_at,
         invite_code=group.invite_code,
         created_by=group.created_by,
         is_active=group.is_active,
