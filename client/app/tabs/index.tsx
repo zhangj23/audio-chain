@@ -56,9 +56,19 @@ export default function HomeScreen() {
     try {
       setInvitesLoading(true);
       const invites = await apiService.getPendingInvites();
-      setPendingInvites(invites);
+      console.log("Fetched pending invites:", invites);
+
+      // Filter out any undefined or invalid invites
+      const validInvites = invites.filter(
+        (invite) =>
+          invite && invite.id && invite.group_id && invite.invited_username
+      );
+
+      console.log("Valid invites after filtering:", validInvites);
+      setPendingInvites(validInvites);
     } catch (error) {
       console.error("Failed to fetch pending invites:", error);
+      setPendingInvites([]);
     } finally {
       setInvitesLoading(false);
     }
@@ -279,7 +289,7 @@ export default function HomeScreen() {
         </View>
 
         {/* Invites Notification */}
-        {pendingInvites.length > 0 && (
+        {pendingInvites && pendingInvites.length > 0 && (
           <View style={styles.invitesNotification}>
             <View style={styles.invitesContent}>
               <View style={styles.invitesInfo}>
@@ -379,7 +389,7 @@ export default function HomeScreen() {
             onBack={() => setSelectedGroup(null)}
             onRecord={(groupId) => {
               setSelectedGroup(null);
-              router.push("/tabs/record");
+              router.push(`/tabs/record?groupId=${groupId}`);
             }}
             onWatchVideos={(group) => {
               setSelectedGroup(null);

@@ -73,12 +73,12 @@ export interface GroupInvite {
   status: "pending" | "accepted" | "declined" | "expired";
   created_at: string;
   expires_at: string;
-  group: {
+  group?: {
     id: number;
     name: string;
     description?: string;
   };
-  invited_by_user: {
+  invited_by_user?: {
     id: number;
     username: string;
   };
@@ -414,15 +414,21 @@ class ApiService {
   }
 
   async acceptInvite(inviteId: number): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/groups/invites/${inviteId}/accept`, {
-      method: "POST",
-    });
+    return this.request<{ message: string }>(
+      `/groups/invites/${inviteId}/accept`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   async declineInvite(inviteId: number): Promise<{ message: string }> {
-    return this.request<{ message: string }>(`/groups/invites/${inviteId}/decline`, {
-      method: "POST",
-    });
+    return this.request<{ message: string }>(
+      `/groups/invites/${inviteId}/decline`,
+      {
+        method: "POST",
+      }
+    );
   }
 
   // Video methods
