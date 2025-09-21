@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.models.user import User
 from app.models.group import Group, GroupMember, GroupPendingRequest
+from app.models.video import VideoSubmission
 from app.schemas.group import (
     GroupCreate, 
     GroupResponse, 
@@ -290,3 +291,45 @@ async def get_pending_invites(
         created_at=pr.created_at,
         expires_at=pr.expires_at
     ) for pr in pending_requests]
+
+@router.get("/{group_id}/video-stats")
+async def get_group_video_stats(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get video submission statistics for a group"""
+    # Check if user is a member of the group
+    membership = db.query(GroupMember).filter(
+        GroupMember.user_id == current_user.id,
+        GroupMember.group_id == group_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a member of this group"
+        )
+    
+    # Get total video submissions for this group
+    total_submissions = db.query(VideoSubmission).filter(
+        VideoSubmission.group_id == group_id
+    ).count()
+    
+    # Get unique users who have submitted videos
+    unique_submitters = db.query(VideoSubmission.user_id).filter(
+        VideoSubmission.group_id == group_id
+    ).distinct().count()
+    
+    # Get total members in the group
+    total_members = db.query(GroupMember).filter(
+        GroupMember.group_id == group_id
+    ).count()
+    
+    return {
+        "group_id": group_id,
+        "total_submissions": total_submissions,
+        "unique_submitters": unique_submitters,
+        "total_members": total_members,
+        "submission_rate": round((unique_submitters / total_members) * 100, 1) if total_members > 0 else 0
+    }

@@ -26,9 +26,11 @@ class WeeklyCompilation(Base):
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
     week_start = Column(DateTime, nullable=False)
     week_end = Column(DateTime, nullable=False)
-    s3_key = Column(String, nullable=False)  # S3 object key for the final video
+    s3_key = Column(String, nullable=True)  # S3 object key for the final video (nullable until completed)
     music_track_id = Column(Integer, ForeignKey("music_tracks.id"), nullable=True)
+    status = Column(String, default="pending")  # pending, processing, completed, failed
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    completed_at = Column(DateTime, nullable=True)
 
     # Relationships
     group = relationship("Group", back_populates="weekly_compilations")

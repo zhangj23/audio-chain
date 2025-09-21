@@ -16,22 +16,37 @@ const { width } = Dimensions.get("window");
 
 interface GroupSettingsProps {
   group: {
-    id: string;
+    id: number;
     name: string;
-    members: string[];
-    videosSubmitted: number;
-    totalMembers: number;
-    dueDate: string;
-    prompt: string;
-    isRevealed: boolean;
+    description?: string;
+    members: any[];
+    current_prompt?: {
+      id: number;
+      text: string;
+      week_start: string;
+      week_end: string;
+      is_active: boolean;
+    };
+    videoStats?: {
+      group_id: number;
+      total_submissions: number;
+      unique_submitters: number;
+      total_members: number;
+      submission_rate: number;
+    };
+    isRevealed?: boolean;
   };
   onBack: () => void;
   onSave: (updates: any) => void;
 }
 
 export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
-  const [groupName, setGroupName] = useState(group.name.replace(/[🎓👨‍👩‍👧‍👦💼]/g, "").trim());
-  const [selectedPrompt, setSelectedPrompt] = useState(group.prompt);
+  const [groupName, setGroupName] = useState(
+    group.name.replace(/[🎓👨‍👩‍👧‍👦💼]/g, "").trim()
+  );
+  const [selectedPrompt, setSelectedPrompt] = useState(
+    group.current_prompt?.text || ""
+  );
   const [showPromptSelector, setShowPromptSelector] = useState(false);
 
   // Engaging prompts with categories
@@ -91,7 +106,10 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
     Alert.alert("Notifications", "Manage your group notifications:", [
       { text: "Turn Off", onPress: () => console.log("Notifications off") },
       { text: "Reminders Only", onPress: () => console.log("Reminders only") },
-      { text: "All Notifications", onPress: () => console.log("All notifications") },
+      {
+        text: "All Notifications",
+        onPress: () => console.log("All notifications"),
+      },
       { text: "Cancel", style: "cancel" },
     ]);
   };
@@ -149,7 +167,10 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.promptCategories} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.promptCategories}
+        showsVerticalScrollIndicator={false}
+      >
         {Object.entries(promptCategories).map(([category, prompts]) => (
           <View key={category} style={styles.promptCategory}>
             <ThemedText style={styles.categoryTitle}>{category}</ThemedText>
@@ -158,17 +179,19 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
                 key={index}
                 style={[
                   styles.promptOption,
-                  selectedPrompt === prompt && styles.selectedPrompt
+                  selectedPrompt === prompt && styles.selectedPrompt,
                 ]}
                 onPress={() => {
                   setSelectedPrompt(prompt);
                   setShowPromptSelector(false);
                 }}
               >
-                <ThemedText style={[
-                  styles.promptText,
-                  selectedPrompt === prompt && styles.selectedPromptText
-                ]}>
+                <ThemedText
+                  style={[
+                    styles.promptText,
+                    selectedPrompt === prompt && styles.selectedPromptText,
+                  ]}
+                >
                   {prompt}
                 </ThemedText>
                 {selectedPrompt === prompt && (
@@ -199,20 +222,31 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
         {/* Group Identity */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>✨ Group Identity</ThemedText>
-          
+
           {/* Group Picture */}
-          <TouchableOpacity style={styles.settingItem} onPress={changeGroupPicture}>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={changeGroupPicture}
+          >
             <View style={styles.settingLeft}>
               <View style={styles.groupPicture}>
                 <ThemedText style={styles.groupEmoji}>
-                  {group.name.includes("🎓") ? "🎓" : 
-                   group.name.includes("👨‍👩‍👧‍👦") ? "👨‍👩‍👧‍👦" : 
-                   group.name.includes("💼") ? "💼" : "👥"}
+                  {group.name.includes("🎓")
+                    ? "🎓"
+                    : group.name.includes("👨‍👩‍👧‍👦")
+                    ? "👨‍👩‍👧‍👦"
+                    : group.name.includes("💼")
+                    ? "💼"
+                    : "👥"}
                 </ThemedText>
               </View>
               <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingTitle}>Group Picture</ThemedText>
-                <ThemedText style={styles.settingSubtitle}>Tap to change</ThemedText>
+                <ThemedText style={styles.settingTitle}>
+                  Group Picture
+                </ThemedText>
+                <ThemedText style={styles.settingSubtitle}>
+                  Tap to change
+                </ThemedText>
               </View>
             </View>
             <IconSymbol name="chevron.right" size={16} color="#666" />
@@ -238,8 +272,8 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
           </View>
 
           {/* Current Prompt */}
-          <TouchableOpacity 
-            style={styles.settingItem} 
+          <TouchableOpacity
+            style={styles.settingItem}
             onPress={() => setShowPromptSelector(true)}
           >
             <View style={styles.settingLeft}>
@@ -247,7 +281,9 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
                 <IconSymbol name="lightbulb" size={20} color="#ff9500" />
               </View>
               <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingTitle}>Current Prompt</ThemedText>
+                <ThemedText style={styles.settingTitle}>
+                  Current Prompt
+                </ThemedText>
                 <ThemedText style={styles.promptPreview} numberOfLines={1}>
                   {selectedPrompt}
                 </ThemedText>
@@ -264,11 +300,19 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
           <TouchableOpacity style={styles.settingItem} onPress={inviteFriends}>
             <View style={styles.settingLeft}>
               <View style={styles.settingIcon}>
-                <IconSymbol name="person.badge.plus" size={20} color="#4CAF50" />
+                <IconSymbol
+                  name="person.badge.plus"
+                  size={20}
+                  color="#4CAF50"
+                />
               </View>
               <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingTitle}>Invite Friends</ThemedText>
-                <ThemedText style={styles.settingSubtitle}>Share group link</ThemedText>
+                <ThemedText style={styles.settingTitle}>
+                  Invite Friends
+                </ThemedText>
+                <ThemedText style={styles.settingSubtitle}>
+                  Share group link
+                </ThemedText>
               </View>
             </View>
             <IconSymbol name="chevron.right" size={16} color="#666" />
@@ -280,21 +324,36 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
                 <IconSymbol name="clock" size={20} color="#ff9500" />
               </View>
               <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingTitle}>Change Deadline</ThemedText>
-                <ThemedText style={styles.settingSubtitle}>{group.dueDate}</ThemedText>
+                <ThemedText style={styles.settingTitle}>
+                  Change Deadline
+                </ThemedText>
+                <ThemedText style={styles.settingSubtitle}>
+                  {group.current_prompt?.week_end
+                    ? new Date(
+                        group.current_prompt.week_end
+                      ).toLocaleDateString()
+                    : "No deadline"}
+                </ThemedText>
               </View>
             </View>
             <IconSymbol name="chevron.right" size={16} color="#666" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingItem} onPress={notificationSettings}>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={notificationSettings}
+          >
             <View style={styles.settingLeft}>
               <View style={styles.settingIcon}>
                 <IconSymbol name="bell" size={20} color="#007AFF" />
               </View>
               <View style={styles.settingInfo}>
-                <ThemedText style={styles.settingTitle}>Notifications</ThemedText>
-                <ThemedText style={styles.settingSubtitle}>All notifications</ThemedText>
+                <ThemedText style={styles.settingTitle}>
+                  Notifications
+                </ThemedText>
+                <ThemedText style={styles.settingSubtitle}>
+                  All notifications
+                </ThemedText>
               </View>
             </View>
             <IconSymbol name="chevron.right" size={16} color="#666" />
@@ -304,15 +363,21 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
         {/* Danger Zone */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>⚠️ Danger Zone</ThemedText>
-          
+
           <TouchableOpacity style={styles.dangerItem} onPress={leaveGroup}>
             <View style={styles.settingLeft}>
               <View style={styles.dangerIcon}>
-                <IconSymbol name="arrow.right.square" size={20} color="#ff4444" />
+                <IconSymbol
+                  name="arrow.right.square"
+                  size={20}
+                  color="#ff4444"
+                />
               </View>
               <View style={styles.settingInfo}>
                 <ThemedText style={styles.dangerTitle}>Leave Group</ThemedText>
-                <ThemedText style={styles.settingSubtitle}>You won't see this challenge anymore</ThemedText>
+                <ThemedText style={styles.settingSubtitle}>
+                  You won't see this challenge anymore
+                </ThemedText>
               </View>
             </View>
           </TouchableOpacity>
@@ -324,7 +389,9 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
               </View>
               <View style={styles.settingInfo}>
                 <ThemedText style={styles.dangerTitle}>Delete Group</ThemedText>
-                <ThemedText style={styles.settingSubtitle}>Permanently delete for everyone</ThemedText>
+                <ThemedText style={styles.settingSubtitle}>
+                  Permanently delete for everyone
+                </ThemedText>
               </View>
             </View>
           </TouchableOpacity>

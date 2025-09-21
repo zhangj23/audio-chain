@@ -56,7 +56,24 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
         groupsData.length,
         "groups"
       );
-      setGroups(groupsData);
+
+      // Fetch video stats for each group
+      const groupsWithStats = await Promise.all(
+        groupsData.map(async (group) => {
+          try {
+            const videoStats = await apiService.getGroupVideoStats(group.id);
+            return { ...group, videoStats };
+          } catch (error) {
+            console.warn(
+              `Failed to get video stats for group ${group.id}:`,
+              error
+            );
+            return { ...group, videoStats: undefined };
+          }
+        })
+      );
+
+      setGroups(groupsWithStats);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to load groups";

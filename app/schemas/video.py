@@ -24,9 +24,11 @@ class WeeklyCompilationResponse(BaseModel):
     group_id: int
     week_start: datetime
     week_end: datetime
-    s3_key: str
+    s3_key: Optional[str] = None
     music_track_id: Optional[int] = None
+    status: str
     created_at: datetime
+    completed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

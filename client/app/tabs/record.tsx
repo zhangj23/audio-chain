@@ -420,12 +420,21 @@ export default function RecordScreen() {
     }
   };
 
-  // Gesture for hold-to-record
-  const pressGesture = Gesture.LongPress()
-    .minDuration(0)
-    .onStart(handlePressIn)
-    .onEnd(handlePressOut)
-    .onTouchesCancelled(handlePressOut);
+  // Combined gesture for hold-to-record that only stops when finger is lifted
+  const recordGesture = Gesture.Simultaneous(
+    Gesture.LongPress()
+      .minDuration(0)
+      .onStart(handlePressIn)
+      .onEnd(handlePressOut),
+    Gesture.Pan()
+      .maxPointers(1) // Only allow single finger
+      .onEnd(() => {
+        // Stop recording when finger is lifted (even if moved)
+        if (isRecording) {
+          handlePressOut();
+        }
+      })
+  );
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -525,7 +534,7 @@ export default function RecordScreen() {
 
             {/* Centered Record Button - Hold to Record */}
             <View style={styles.centerControls}>
-              <GestureDetector gesture={pressGesture}>
+              <GestureDetector gesture={recordGesture}>
                 <Animated.View
                   style={[
                     styles.recordButtonContainer,

@@ -17,6 +17,7 @@ import { GroupDetail } from "@/components/group-detail";
 import { CreateGroupModal } from "@/components/create-group-modal";
 import { useGroups } from "@/contexts/GroupsContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiService } from "@/services/api";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -28,11 +29,22 @@ export default function HomeScreen() {
   const [submittedVideos] = useState<{
     [groupId: string]: any;
   }>({});
+  const [userSubmissions, setUserSubmissions] = useState<any[]>([]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshGroups();
     setRefreshing(false);
+  };
+
+  const fetchUserSubmissions = async (groupId: number) => {
+    try {
+      const submissions = await apiService.getGroupSubmissions(groupId);
+      setUserSubmissions(submissions);
+    } catch (error) {
+      console.error("Failed to fetch user submissions:", error);
+      setUserSubmissions([]);
+    }
   };
 
   const handleCreateGroup = async (groupData: {
@@ -54,6 +66,7 @@ export default function HomeScreen() {
 
   const handleGroupPress = (group: any) => {
     setSelectedGroup(group);
+    fetchUserSubmissions(group.id);
   };
 
   if (isLoading) {
@@ -137,7 +150,9 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.stat}>
                     <IconSymbol name="video" size={14} color="#8E8E93" />
-                    <ThemedText style={styles.statText}>0 videos</ThemedText>
+                    <ThemedText style={styles.statText}>
+                      {group.videoStats?.total_submissions || 0} videos
+                    </ThemedText>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -168,6 +183,7 @@ export default function HomeScreen() {
               selectedGroup ? submittedVideos[selectedGroup.id] || null : null
             }
             currentUserId={user?.id}
+            userSubmissions={userSubmissions}
           />
         )}
       </Modal>

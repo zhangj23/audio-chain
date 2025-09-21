@@ -281,8 +281,7 @@ async def generate_compilation(
             week_start=week_start.date(),
             week_end=week_end.date(),
             status="processing",
-            s3_key="",  # Will be updated when processing completes
-            created_at=datetime.now()
+            s3_key=None  # Will be updated when processing completes
         )
         db.add(compilation)
         db.commit()

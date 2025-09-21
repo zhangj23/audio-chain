@@ -3,7 +3,6 @@ import {
   TouchableOpacity,
   View,
   Dimensions,
-  Alert,
   ScrollView,
   Modal,
 } from "react-native";
@@ -13,23 +12,35 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupSettings } from "@/components/group-settings";
 import { useState, useRef } from "react";
 import { Video } from "expo-av";
+import { apiService } from "@/services/api";
 
 const { width } = Dimensions.get("window");
 
 interface GroupDetailProps {
   group: {
-    id: string;
+    id: number;
     name: string;
+    description?: string;
     members: any[]; // Can be string[] (mock) or GroupMember[] (real data)
-    videosSubmitted: number;
-    totalMembers: number;
-    dueDate: string;
-    prompt: string;
-    isRevealed: boolean;
+    current_prompt?: {
+      id: number;
+      text: string;
+      week_start: string;
+      week_end: string;
+      is_active: boolean;
+    };
+    videoStats?: {
+      group_id: number;
+      total_submissions: number;
+      unique_submitters: number;
+      total_members: number;
+      submission_rate: number;
+    };
+    isRevealed?: boolean;
     isWeaved?: boolean; // New state for after weaving is complete
   };
   onBack: () => void;
-  onRecord: (groupId: string) => void;
+  onRecord: (groupId: number) => void;
   onWatchVideos: (group: any) => void;
   submittedVideo?: {
     uri: string;
@@ -37,6 +48,15 @@ interface GroupDetailProps {
     timestamp: number;
   } | null;
   currentUserId?: number;
+  userSubmissions?: {
+    id: number;
+    user_id: number;
+    group_id: number;
+    prompt_id: number;
+    s3_key: string;
+    duration: number;
+    submitted_at: string;
+  }[];
 }
 
 export function GroupDetail({
@@ -46,15 +66,38 @@ export function GroupDetail({
   onWatchVideos,
   submittedVideo,
   currentUserId,
+  userSubmissions = [],
 }: GroupDetailProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [currentVideoUri, setCurrentVideoUri] = useState<string | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isCreatingCollage, setIsCreatingCollage] = useState(false);
+  const [compilationId, setCompilationId] = useState<number | null>(null); // For future compilation status tracking
   const videoRef = useRef<Video>(null);
 
   const openSettings = () => {
     setShowSettings(true);
+  };
+
+  const createCollage = async () => {
+    try {
+      setIsCreatingCollage(true);
+      console.log("Creating collage for group:", group.name);
+
+      const response = await apiService.generateCompilation(group.id);
+      console.log("Compilation response:", response);
+
+      setCompilationId(response.compilation_id);
+
+      // TODO: Show success message or navigate to compilation status
+      console.log("Collage creation started with ID:", response.compilation_id);
+    } catch (error) {
+      console.error("Failed to create collage:", error);
+      // TODO: Show error message to user
+    } finally {
+      setIsCreatingCollage(false);
+    }
   };
 
   const handleSettingsSave = (updates: any) => {
@@ -120,16 +163,18 @@ export function GroupDetail({
   };
 
   const renderMemberGrid = () => {
-    const { columns, tileWidth } = getGridDimensions();
+    const { tileWidth } = getGridDimensions();
 
     return (
       <View style={styles.videoGrid}>
         {(group.members || []).map((member, index) => {
-          const hasSubmitted = index < group.videosSubmitted;
           const isYou =
             typeof member === "string"
               ? member === "You"
               : currentUserId && member.user_id === currentUserId;
+
+          // Check if this user has submitted a video
+          const hasSubmitted = isYou && userSubmissions.length > 0;
 
           // If weaved, no individual videos can be viewed
           const userHasSubmittedVideo = isYou && submittedVideo;
@@ -207,12 +252,26 @@ export function GroupDetail({
                   ) : (
                     <View style={styles.emptyVideo}>
                       {isYou ? (
-                        <>
-                          <IconSymbol name="plus" size={20} color="#666" />
-                          <ThemedText style={styles.addVideoText}>
-                            Add
-                          </ThemedText>
-                        </>
+                        // Check if user has submitted a video
+                        userSubmissions.length > 0 ? (
+                          <>
+                            <IconSymbol
+                              name="checkmark.circle.fill"
+                              size={20}
+                              color="#4CAF50"
+                            />
+                            <ThemedText style={styles.submittedVideoText}>
+                              Submitted
+                            </ThemedText>
+                          </>
+                        ) : (
+                          <>
+                            <IconSymbol name="plus" size={20} color="#666" />
+                            <ThemedText style={styles.addVideoText}>
+                              Add
+                            </ThemedText>
+                          </>
+                        )
                       ) : (
                         <IconSymbol name="clock" size={20} color="#444" />
                       )}
@@ -254,11 +313,13 @@ export function GroupDetail({
             </ThemedText>
             <View style={styles.berealHeaderStats}>
               <ThemedText style={styles.berealMemberCount}>
-                {group.totalMembers} members
+                {group.videoStats?.total_members || 0} members
               </ThemedText>
               <View style={styles.berealDot} />
               <ThemedText style={styles.berealDueDate}>
-                {group.dueDate}
+                {group.current_prompt?.week_end
+                  ? new Date(group.current_prompt.week_end).toLocaleDateString()
+                  : "No deadline"}
               </ThemedText>
             </View>
           </View>
@@ -279,7 +340,8 @@ export function GroupDetail({
           <View style={styles.groupCover}>
             <View style={styles.coverGradient}>
               <ThemedText style={styles.promptLarge}>
-                &quot;{group.prompt}&quot;
+                &quot;{group.current_prompt?.text || "No prompt available"}
+                &quot;
               </ThemedText>
             </View>
           </View>
@@ -289,24 +351,21 @@ export function GroupDetail({
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {group.videosSubmitted}
+                  {group.videoStats?.total_submissions || 0}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Submitted</ThemedText>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {group.totalMembers}
+                  {group.videoStats?.total_members || 0}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Members</ThemedText>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {Math.round(
-                    (group.videosSubmitted / group.totalMembers) * 100
-                  )}
-                  %
+                  {group.videoStats?.submission_rate || 0}%
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Complete</ThemedText>
               </View>
@@ -342,7 +401,11 @@ export function GroupDetail({
                     ? "Ready to View"
                     : group.isRevealed
                     ? "Complete"
-                    : group.dueDate}
+                    : group.current_prompt?.week_end
+                    ? new Date(
+                        group.current_prompt.week_end
+                      ).toLocaleDateString()
+                    : "No deadline"}
                 </ThemedText>
               </View>
 
@@ -373,7 +436,7 @@ export function GroupDetail({
                 >
                   <IconSymbol name="wand.and.stars" size={16} color="#fff" />
                   <ThemedText style={styles.weaveButtonCompactText}>
-                    Let's Weave
+                    Let&apos;s Weave
                   </ThemedText>
                 </TouchableOpacity>
               ) : null}
@@ -445,7 +508,9 @@ export function GroupDetail({
             <ThemedText style={styles.sectionTitle}>
               {group.isWeaved
                 ? "Weaved Video"
-                : `Videos (${group.videosSubmitted}/${group.totalMembers})`}
+                : `Videos (${group.videoStats?.unique_submitters || 0}/${
+                    group.videoStats?.total_members || 0
+                  })`}
             </ThemedText>
             {group.isWeaved ? (
               <TouchableOpacity
@@ -471,7 +536,30 @@ export function GroupDetail({
                   Watch All
                 </ThemedText>
               </TouchableOpacity>
-            ) : null}
+            ) : (
+              <TouchableOpacity
+                style={[
+                  styles.sectionAction,
+                  isCreatingCollage && styles.sectionActionDisabled,
+                ]}
+                onPress={createCollage}
+                disabled={isCreatingCollage}
+              >
+                <IconSymbol
+                  name={isCreatingCollage ? "clock" : "wand.and.stars"}
+                  size={16}
+                  color={isCreatingCollage ? "#666" : "#9C27B0"}
+                />
+                <ThemedText
+                  style={[
+                    styles.sectionActionText,
+                    isCreatingCollage && styles.sectionActionTextDisabled,
+                  ]}
+                >
+                  {isCreatingCollage ? "Creating..." : "Create Collage"}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
           </View>
 
           {group.isWeaved ? (
@@ -499,7 +587,8 @@ export function GroupDetail({
                     {group.name} - Compilation
                   </ThemedText>
                   <ThemedText style={styles.weavedVideoSubtitle}>
-                    All {group.totalMembers} videos woven together
+                    All {group.videoStats?.total_members || 0} videos woven
+                    together
                   </ThemedText>
                 </View>
               </TouchableOpacity>
@@ -513,7 +602,7 @@ export function GroupDetail({
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>
-              Members ({group.totalMembers})
+              Members ({group.videoStats?.total_members || 0})
             </ThemedText>
             <TouchableOpacity style={styles.sectionAction}>
               <IconSymbol name="person.badge.plus" size={16} color="#007AFF" />
@@ -524,11 +613,13 @@ export function GroupDetail({
           {/* Member List with Enhanced Cards */}
           <View style={styles.memberList}>
             {(group.members || []).map((member, index) => {
-              const hasSubmitted = index < group.videosSubmitted;
               const isYou =
                 typeof member === "string"
                   ? member === "You"
                   : currentUserId && member.user_id === currentUserId;
+
+              // Check if this user has submitted a video
+              const hasSubmitted = isYou && userSubmissions.length > 0;
               const userHasSubmittedVideo = isYou && submittedVideo;
               const actuallyHasSubmitted =
                 hasSubmitted || userHasSubmittedVideo;
@@ -948,6 +1039,12 @@ const styles = StyleSheet.create({
     color: "#007AFF",
     fontWeight: "500",
   },
+  sectionActionDisabled: {
+    opacity: 0.6,
+  },
+  sectionActionTextDisabled: {
+    color: "#666",
+  },
   activityFeed: {
     gap: 12,
   },
@@ -1143,6 +1240,11 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#666",
     fontWeight: "500",
+  },
+  submittedVideoText: {
+    fontSize: 10,
+    color: "#4CAF50",
+    fontWeight: "600",
   },
   memberLabel: {
     flexDirection: "row",

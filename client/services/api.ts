@@ -18,6 +18,13 @@ export interface Group {
   created_at: string;
   members: GroupMember[];
   current_prompt?: Prompt;
+  videoStats?: {
+    group_id: number;
+    total_submissions: number;
+    unique_submitters: number;
+    total_members: number;
+    submission_rate: number;
+  };
 }
 
 export interface GroupMember {
@@ -384,6 +391,26 @@ class ApiService {
       download_url?: string;
       error?: string;
     }>(API_CONFIG.ENDPOINTS.VIDEOS.COMPILATION_STATUS(compilationId));
+  }
+
+  async getGroupVideoStats(groupId: number): Promise<{
+    group_id: number;
+    total_submissions: number;
+    unique_submitters: number;
+    total_members: number;
+    submission_rate: number;
+  }> {
+    return this.request<{
+      group_id: number;
+      total_submissions: number;
+      unique_submitters: number;
+      total_members: number;
+      submission_rate: number;
+    }>(`/groups/${groupId}/video-stats`);
+  }
+
+  async getGroupSubmissions(groupId: number): Promise<VideoSubmission[]> {
+    return this.request<VideoSubmission[]>(`/videos/submissions/${groupId}`);
   }
 
   // Music tracks
