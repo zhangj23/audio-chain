@@ -356,12 +356,20 @@ export default function RecordScreen() {
         name: `video_${Date.now()}.mp4`,
       } as any;
 
-      // Use apiService to upload video with prompt_id
+      // Use apiService to upload video with prompt_id from group's current prompt
+      const promptId = selectedGroup.current_prompt?.id || 1; // Use group's prompt or default to 1
+      console.log(
+        "Using prompt_id:",
+        promptId,
+        "for group:",
+        selectedGroup.name
+      );
+
       await apiService.submitVideo(
         selectedGroup.id,
         videoFile,
         recordingTime,
-        1 // Default prompt_id, you can get this from the group's current_prompt if available
+        promptId
       );
 
       // Also store locally for offline access
