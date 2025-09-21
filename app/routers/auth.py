@@ -80,6 +80,14 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+@router.post("/logout")
+async def logout_user(current_user: User = Depends(get_current_user)):
+    """
+    Logout user - in JWT-based auth, logout is handled client-side
+    by removing the token. This endpoint exists for consistency.
+    """
+    return {"message": "Logged out successfully"}
+
 @router.delete("/account")
 async def delete_account(
     request: DeleteAccountRequest,

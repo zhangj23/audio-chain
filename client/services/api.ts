@@ -324,6 +324,19 @@ class ApiService {
     return !!this.token;
   }
 
+  async verifyToken(): Promise<boolean> {
+    if (!this.token) return false;
+
+    try {
+      await this.getCurrentUser();
+      return true;
+    } catch (error) {
+      console.error("Token verification failed:", error);
+      await this.logout();
+      return false;
+    }
+  }
+
   async refreshToken(): Promise<void> {
     try {
       await this.getCurrentUser();

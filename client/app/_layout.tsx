@@ -11,6 +11,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { ProfileProvider } from "../contexts/ProfileContext";
 import { AuthProvider } from "../contexts/AuthContext";
 import { GroupsProvider } from "../contexts/GroupsContext";
+import { AuthGuard } from "../components/AuthGuard";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -22,7 +23,8 @@ export default function RootLayout() {
           <ThemeProvider
             value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
           >
-            <Stack initialRouteName="auth">
+            <Stack initialRouteName="index">
+              <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen
                 name="auth"
                 options={{ title: "Log in", headerShown: false }}

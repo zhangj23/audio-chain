@@ -11,6 +11,7 @@ import {
   VideoSubmission,
   WeeklyCompilation,
 } from "../services/api";
+import { useAuth } from "./AuthContext";
 
 interface GroupsContextType {
   groups: Group[];
@@ -37,6 +38,7 @@ interface GroupsProviderProps {
 }
 
 export function GroupsProvider({ children }: GroupsProviderProps) {
+  const { isAuthenticated, user } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,10 +164,18 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
     }
   };
 
-  // Load groups on mount
+  // Load groups when authentication state changes
   useEffect(() => {
-    refreshGroups();
-  }, []);
+    if (isAuthenticated && user) {
+      console.log("GroupsContext: User authenticated, loading groups");
+      refreshGroups();
+    } else {
+      console.log("GroupsContext: User not authenticated, clearing groups");
+      setGroups([]);
+      setError(null);
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, user]);
 
   const value: GroupsContextType = {
     groups,

@@ -5,6 +5,7 @@ import React, {
   useState,
   ReactNode,
 } from "react";
+import { useRouter } from "expo-router";
 import { apiService, User } from "../services/api";
 
 interface AuthContextType {
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const isAuthenticated = !!user;
 
@@ -36,8 +38,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const checkAuth = async () => {
       try {
         if (apiService.isAuthenticated()) {
-          const currentUser = await apiService.getCurrentUser();
-          setUser(currentUser);
+          const isValid = await apiService.verifyToken();
+          if (isValid) {
+            const currentUser = await apiService.getCurrentUser();
+            setUser(currentUser);
+          }
         }
       } catch (error) {
         console.error("Auth check failed:", error);
@@ -50,6 +55,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     checkAuth();
   }, []);
+
+  // Navigate to login when user becomes unauthenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/auth");
+    }
+  }, [isAuthenticated, isLoading, router]);
 
   const login = async (email: string, password: string) => {
     try {

@@ -13,6 +13,7 @@ import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useState, useEffect } from "react";
 import { useProfile } from "../../contexts/ProfileContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { videoStorage } from "../../utils/videoStorage";
 import * as ImagePicker from "expo-image-picker";
 

@@ -10,18 +10,21 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children }: AuthGuardProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isLoading) {
-      if (isAuthenticated) {
-        router.replace("/(tabs)");
+      if (isAuthenticated && user) {
+        // Add a small delay to ensure all contexts are properly initialized
+        setTimeout(() => {
+          router.replace("/(tabs)");
+        }, 500);
       } else {
         router.replace("/auth");
       }
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, user, router]);
 
   if (isLoading) {
     return (
