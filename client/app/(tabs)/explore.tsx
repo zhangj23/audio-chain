@@ -72,6 +72,9 @@ export default function ProfileScreen() {
   // Use profile context
   const { profileImage, setProfileImage, userName, setUserName } = useProfile();
 
+  // Use auth context for logout
+  const { logout } = useAuth();
+
   // Profile editing state
   const [editedName, setEditedName] = useState(userName);
   const [editedBio, setEditedBio] = useState(userData.bio);
@@ -254,6 +257,27 @@ export default function ProfileScreen() {
 
   const openSettings = () => {
     Alert.alert("Settings", "Settings page coming soon!");
+  };
+
+  const handleLogout = () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await logout();
+          } catch (error) {
+            console.error("Logout failed:", error);
+            Alert.alert("Error", "Failed to sign out. Please try again.");
+          }
+        },
+      },
+    ]);
   };
 
   const renderStats = () => (
@@ -493,6 +517,23 @@ export default function ProfileScreen() {
               Notifications
             </ThemedText>
             <IconSymbol name="chevron.right" size={16} color="#888" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Account Actions */}
+        <View style={styles.section}>
+          <ThemedText style={styles.sectionTitle}>Account</ThemedText>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            activeOpacity={0.7}
+          >
+            <View style={styles.logoutButtonContent}>
+              <View style={styles.logoutIconContainer}>
+                <IconSymbol name="power" size={18} color="#fff" />
+              </View>
+              <ThemedText style={styles.logoutButtonText}>Sign Out</ThemedText>
+            </View>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -816,5 +857,39 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
+  },
+  logoutButton: {
+    backgroundColor: "#ff4444",
+    borderRadius: 12,
+    marginTop: 8,
+    shadowColor: "#ff4444",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logoutButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  logoutIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  logoutButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -70,7 +70,7 @@ export default function RecordScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   // Note: Video storage is now handled by shared videoStorage utility
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const videoRef = useRef<Video>(null);
 

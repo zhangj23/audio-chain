@@ -642,7 +642,6 @@ export function GroupDetail({
                 source={{ uri: currentVideoUri }}
                 style={styles.video}
                 useNativeControls={false}
-                resizeMode="cover"
                 isLooping={false}
                 onPlaybackStatusUpdate={(status) => {
                   if (status.isLoaded && status.didJustFinish) {
