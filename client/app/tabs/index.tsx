@@ -15,9 +15,10 @@ import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupDetail } from "@/components/group-detail";
 import { CreateGroupModal } from "@/components/create-group-modal";
+import { InvitesModal } from "@/components/invites-modal";
 import { useGroups } from "@/contexts/GroupsContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { apiService } from "@/services/api";
+import { apiService, GroupInvite } from "@/services/api";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -25,17 +26,38 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showInvitesModal, setShowInvitesModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submittedVideos] = useState<{
     [groupId: string]: any;
   }>({});
   const [userSubmissions, setUserSubmissions] = useState<any[]>([]);
+  const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshGroups();
+    await fetchPendingInvites();
     setRefreshing(false);
   };
+
+  const fetchPendingInvites = async () => {
+    try {
+      setInvitesLoading(true);
+      const invites = await apiService.getPendingInvites();
+      setPendingInvites(invites);
+    } catch (error) {
+      console.error("Failed to fetch pending invites:", error);
+    } finally {
+      setInvitesLoading(false);
+    }
+  };
+
+  // Fetch invites on component mount
+  React.useEffect(() => {
+    fetchPendingInvites();
+  }, []);
 
   const fetchUserSubmissions = async (groupId: number) => {
     try {
@@ -108,6 +130,26 @@ export default function HomeScreen() {
             <IconSymbol name="plus" size={24} color="#007AFF" />
           </TouchableOpacity>
         </View>
+
+        {/* Invites Notification */}
+        {pendingInvites.length > 0 && (
+          <View style={styles.invitesNotification}>
+            <View style={styles.invitesContent}>
+              <View style={styles.invitesInfo}>
+                <IconSymbol name="envelope" size={20} color="#007AFF" />
+                <ThemedText style={styles.invitesText}>
+                  {pendingInvites.length} pending invite{pendingInvites.length > 1 ? 's' : ''}
+                </ThemedText>
+              </View>
+              <TouchableOpacity
+                style={styles.viewInvitesButton}
+                onPress={() => setShowInvitesModal(true)}
+              >
+                <ThemedText style={styles.viewInvitesButtonText}>View Invites</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Groups List */}
         <View style={styles.groupsList}>
@@ -193,6 +235,16 @@ export default function HomeScreen() {
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreateGroup={handleCreateGroup}
+      />
+
+      {/* Invites Modal */}
+      <InvitesModal
+        visible={showInvitesModal}
+        onClose={() => setShowInvitesModal(false)}
+        onInviteAccepted={() => {
+          fetchPendingInvites();
+          refreshGroups();
+        }}
       />
     </ThemedView>
   );
@@ -331,5 +383,41 @@ const styles = StyleSheet.create({
   statText: {
     fontSize: 12,
     color: "#8E8E93",
+  },
+  invitesNotification: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#007AFF",
+  },
+  invitesContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+  },
+  invitesInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  invitesText: {
+    fontSize: 16,
+    color: "#fff",
+    marginLeft: 8,
+    fontWeight: "500",
+  },
+  viewInvitesButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  viewInvitesButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

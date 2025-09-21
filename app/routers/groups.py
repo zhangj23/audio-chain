@@ -15,10 +15,12 @@ from app.schemas.group import (
     GroupJoin, 
     GroupWithMembers, 
     GroupMemberResponse,
+    GroupMemberWithUserResponse,
     GroupPendingRequestResponse,
     GroupCreateResponse,
     GroupInvite,
-    GroupInviteResponse
+    GroupInviteResponse,
+    GroupInviteWithDetails
 )
 from app.auth import get_current_user
 
@@ -173,6 +175,8 @@ async def get_my_groups(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    from sqlalchemy.orm import joinedload
+    
     # Get groups where user is a member
     groups = db.query(Group).join(GroupMember).filter(
         GroupMember.user_id == current_user.id
@@ -180,7 +184,11 @@ async def get_my_groups(
     
     result = []
     for group in groups:
-        members = db.query(GroupMember).filter(GroupMember.group_id == group.id).all()
+        # Get members with user data
+        members = db.query(GroupMember).join(User).filter(
+            GroupMember.group_id == group.id
+        ).options(joinedload(GroupMember.user)).all()
+        
         pending_requests = db.query(GroupPendingRequest).filter(
             GroupPendingRequest.group_id == group.id,
             GroupPendingRequest.status == "pending"
@@ -194,12 +202,18 @@ async def get_my_groups(
             created_by=group.created_by,
             is_active=group.is_active,
             created_at=group.created_at,
-            members=[GroupMemberResponse(
+            members=[GroupMemberWithUserResponse(
                 id=member.id,
                 user_id=member.user_id,
                 group_id=member.group_id,
                 role=member.role,
-                joined_at=member.joined_at
+                joined_at=member.joined_at,
+                user={
+                    "id": member.user.id,
+                    "username": member.user.username,
+                    "email": member.user.email,
+                    "created_at": member.user.created_at.isoformat() if member.user.created_at else None
+                }
             ) for member in members],
             pending_requests=[GroupPendingRequestResponse(
                 id=pr.id,
@@ -215,28 +229,47 @@ async def get_my_groups(
     
     return result
 
-@router.get("/pending-invites", response_model=List[GroupPendingRequestResponse])
+@router.get("/pending-invites", response_model=List[GroupInviteWithDetails])
 async def get_pending_invites(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all pending invites for the current user"""
-    pending_requests = db.query(GroupPendingRequest).filter(
+    """Get all pending invites for the current user with full details"""
+    from sqlalchemy.orm import joinedload
+    
+    pending_requests = db.query(GroupPendingRequest).join(Group).join(User, GroupPendingRequest.invited_by == User.id).filter(
         GroupPendingRequest.invited_username == current_user.username,
-        GroupPendingRequest.status == "pending",
-        GroupPendingRequest.expires_at > datetime.utcnow()  # Not expired
+        GroupPendingRequest.status == "pending"
+    ).options(
+        joinedload(GroupPendingRequest.group),
+        joinedload(GroupPendingRequest.inviter)
     ).all()
     
-    return [
-        GroupPendingRequestResponse(
+    result = []
+    for pr in pending_requests:
+        # Check if expired
+        is_expired = pr.expires_at and pr.expires_at < datetime.utcnow()
+        
+        result.append(GroupInviteWithDetails(
             id=pr.id,
             group_id=pr.group_id,
             invited_username=pr.invited_username,
             invited_by=pr.invited_by,
-            status=pr.status,
+            status="expired" if is_expired else pr.status,
             created_at=pr.created_at,
-            expires_at=pr.expires_at
-        ) for pr in pending_requests]
+            expires_at=pr.expires_at,
+            group={
+                "id": pr.group.id,
+                "name": pr.group.name,
+                "description": pr.group.description
+            },
+            invited_by_user={
+                "id": pr.inviter.id,
+                "username": pr.inviter.username
+            }
+        ))
+    
+    return result
 
 @router.get("/users", response_model=List[dict])
 async def get_users_for_invite(
@@ -282,7 +315,12 @@ async def get_group(
             detail="Group not found"
         )
     
-    members = db.query(GroupMember).filter(GroupMember.group_id == group_id).all()
+    # Get members with user data
+    from sqlalchemy.orm import joinedload
+    members = db.query(GroupMember).join(User).filter(
+        GroupMember.group_id == group_id
+    ).options(joinedload(GroupMember.user)).all()
+    
     pending_requests = db.query(GroupPendingRequest).filter(
         GroupPendingRequest.group_id == group_id,
         GroupPendingRequest.status == "pending"
@@ -296,12 +334,18 @@ async def get_group(
         created_by=group.created_by,
         is_active=group.is_active,
         created_at=group.created_at,
-        members=[GroupMemberResponse(
+        members=[GroupMemberWithUserResponse(
             id=member.id,
             user_id=member.user_id,
             group_id=member.group_id,
             role=member.role,
-            joined_at=member.joined_at
+            joined_at=member.joined_at,
+            user={
+                "id": member.user.id,
+                "username": member.user.username,
+                "email": member.user.email,
+                "created_at": member.user.created_at.isoformat() if member.user.created_at else None
+            }
         ) for member in members],
         pending_requests=[GroupPendingRequestResponse(
             id=pr.id,
@@ -457,3 +501,116 @@ async def invite_users_to_group(
         failed_invites=failed_invites,
         pending_requests=pending_request_responses
     )
+
+@router.post("/invites/{invite_id}/accept", response_model=GroupResponse)
+async def accept_invite(
+    invite_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Accept a group invitation"""
+    try:
+        # Find the pending request
+        pending_request = db.query(GroupPendingRequest).filter(
+            GroupPendingRequest.id == invite_id,
+            GroupPendingRequest.invited_username == current_user.username,
+            GroupPendingRequest.status == "pending"
+        ).first()
+        
+        if not pending_request:
+            raise HTTPException(
+                status_code=404,
+                detail="Invitation not found or already processed"
+            )
+        
+        # Check if expired
+        if pending_request.expires_at and pending_request.expires_at < datetime.utcnow():
+            raise HTTPException(
+                status_code=400,
+                detail="Invitation has expired"
+            )
+        
+        # Get the group to ensure it exists
+        group = db.query(Group).filter(Group.id == pending_request.group_id).first()
+        if not group:
+            raise HTTPException(
+                status_code=404,
+                detail="Group not found"
+            )
+        
+        # Check if user is already a member
+        existing_member = db.query(GroupMember).filter(
+            GroupMember.user_id == current_user.id,
+            GroupMember.group_id == pending_request.group_id
+        ).first()
+        
+        if existing_member:
+            # Update the request status to accepted
+            pending_request.status = "accepted"
+            db.commit()
+            return group
+        
+        # Add user to group
+        db_member = GroupMember(
+            user_id=current_user.id,
+            group_id=pending_request.group_id,
+            role="member"
+        )
+        db.add(db_member)
+        
+        # Update the request status
+        pending_request.status = "accepted"
+        
+        # Commit all changes in a single transaction
+        db.commit()
+        
+        return group
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Rollback on any other error
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to accept invitation: {str(e)}"
+        )
+
+@router.post("/invites/{invite_id}/decline")
+async def decline_invite(
+    invite_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Decline a group invitation"""
+    try:
+        # Find the pending request
+        pending_request = db.query(GroupPendingRequest).filter(
+            GroupPendingRequest.id == invite_id,
+            GroupPendingRequest.invited_username == current_user.username,
+            GroupPendingRequest.status == "pending"
+        ).first()
+        
+        if not pending_request:
+            raise HTTPException(
+                status_code=404,
+                detail="Invitation not found or already processed"
+            )
+        
+        # Update the request status
+        pending_request.status = "declined"
+        db.commit()
+        
+        return {"message": "Invitation declined"}
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # Rollback on any other error
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to decline invitation: {str(e)}"
+        )

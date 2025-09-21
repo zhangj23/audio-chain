@@ -29,6 +29,17 @@ class GroupMemberResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class GroupMemberWithUserResponse(BaseModel):
+    id: int
+    user_id: int
+    group_id: int
+    role: str
+    joined_at: datetime
+    user: dict  # User information
+
+    class Config:
+        from_attributes = True
+
 class GroupPendingRequestResponse(BaseModel):
     id: int
     group_id: int
@@ -37,6 +48,20 @@ class GroupPendingRequestResponse(BaseModel):
     status: str
     created_at: datetime
     expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class GroupInviteWithDetails(BaseModel):
+    id: int
+    group_id: int
+    invited_username: str
+    invited_by: int
+    status: str
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    group: dict  # Group information
+    invited_by_user: dict  # User information
 
     class Config:
         from_attributes = True
@@ -54,7 +79,7 @@ class GroupInviteResponse(BaseModel):
     pending_requests: List[GroupPendingRequestResponse]
 
 class GroupWithMembers(GroupResponse):
-    members: List[GroupMemberResponse] = []
+    members: List[GroupMemberWithUserResponse] = []
     pending_requests: List[GroupPendingRequestResponse] = []
 
 class GroupCreateResponse(GroupResponse):

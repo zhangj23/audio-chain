@@ -64,6 +64,25 @@ export interface WeeklyCompilation {
   completed_at?: string;
 }
 
+export interface GroupInvite {
+  id: number;
+  group_id: number;
+  invited_username: string;
+  invited_by: number;
+  status: "pending" | "accepted" | "declined" | "expired";
+  created_at: string;
+  expires_at: string;
+  group: {
+    id: number;
+    name: string;
+    description?: string;
+  };
+  invited_by_user: {
+    id: number;
+    username: string;
+  };
+}
+
 export interface AuthResponse {
   access_token: string;
   token_type: string;
@@ -330,6 +349,23 @@ class ApiService {
       email: string;
       created_at: string;
     }[]>(API_CONFIG.ENDPOINTS.GROUPS.USERS);
+  }
+
+  // Invite methods
+  async getPendingInvites(): Promise<GroupInvite[]> {
+    return this.request<GroupInvite[]>("/groups/pending-invites");
+  }
+
+  async acceptInvite(inviteId: number): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/invites/${inviteId}/accept`, {
+      method: "POST",
+    });
+  }
+
+  async declineInvite(inviteId: number): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/groups/invites/${inviteId}/decline`, {
+      method: "POST",
+    });
   }
 
   // Video methods

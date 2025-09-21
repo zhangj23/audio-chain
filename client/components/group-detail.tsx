@@ -713,7 +713,7 @@ export function GroupDetail({
 
                     <View style={styles.memberDetails}>
                       <ThemedText style={styles.memberNameCard}>
-                        {isYou ? "You" : member}
+                        {isYou ? "You" : (typeof member === "string" ? member : member.user?.username || "Unknown User")}
                       </ThemedText>
                       <ThemedText style={styles.memberStatus}>
                         {actuallyHasSubmitted
