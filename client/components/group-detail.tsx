@@ -5,11 +5,13 @@ import {
   Dimensions,
   ScrollView,
   Modal,
+  Alert,
 } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupSettings } from "@/components/group-settings";
+import { InviteModal } from "@/components/invite-modal";
 import { useState, useRef } from "react";
 import { Video } from "expo-av";
 import { apiService } from "@/services/api";
@@ -69,6 +71,7 @@ export function GroupDetail({
   userSubmissions = [],
 }: GroupDetailProps) {
   const [showSettings, setShowSettings] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [currentVideoUri, setCurrentVideoUri] = useState<string | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
@@ -103,6 +106,20 @@ export function GroupDetail({
   const handleSettingsSave = (updates: any) => {
     console.log("Settings updated:", updates);
     setShowSettings(false);
+  };
+
+  const openInviteModal = () => {
+    setShowInviteModal(true);
+  };
+
+  const handleInvite = (userIds: string[]) => {
+    console.log("Inviting users to group:", group.id, userIds);
+    // TODO: Implement actual invite API call
+    Alert.alert(
+      "Invites Sent!",
+      `Successfully invited ${userIds.length} people to ${group.name}.`
+    );
+    setShowInviteModal(false);
   };
 
   const openVideoPlayer = (videoUri: string) => {
@@ -313,7 +330,7 @@ export function GroupDetail({
             </ThemedText>
             <View style={styles.berealHeaderStats}>
               <ThemedText style={styles.berealMemberCount}>
-                {group.videoStats?.total_members || 0} members
+                {group.members?.length || 0} members
               </ThemedText>
               <View style={styles.berealDot} />
               <ThemedText style={styles.berealDueDate}>
@@ -351,21 +368,23 @@ export function GroupDetail({
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {group.videoStats?.total_submissions || 0}
+                  {userSubmissions?.length || 0}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Submitted</ThemedText>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {group.videoStats?.total_members || 0}
+                  {group.members?.length || 0}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Members</ThemedText>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {group.videoStats?.submission_rate || 0}%
+                  {group.members?.length > 0 
+                    ? Math.round(((userSubmissions?.length || 0) / group.members.length) * 100)
+                    : 0}%
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Complete</ThemedText>
               </View>
@@ -508,9 +527,7 @@ export function GroupDetail({
             <ThemedText style={styles.sectionTitle}>
               {group.isWeaved
                 ? "Weaved Video"
-                : `Videos (${group.videoStats?.unique_submitters || 0}/${
-                    group.videoStats?.total_members || 0
-                  })`}
+                : `Videos (${userSubmissions?.length || 0}/${group.members?.length || 0})`}
             </ThemedText>
             {group.isWeaved ? (
               <TouchableOpacity
@@ -587,8 +604,7 @@ export function GroupDetail({
                     {group.name} - Compilation
                   </ThemedText>
                   <ThemedText style={styles.weavedVideoSubtitle}>
-                    All {group.videoStats?.total_members || 0} videos woven
-                    together
+                    All {group.members?.length || 0} videos woven together
                   </ThemedText>
                 </View>
               </TouchableOpacity>
@@ -602,9 +618,9 @@ export function GroupDetail({
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>
-              Members ({group.videoStats?.total_members || 0})
+              Members ({group.members?.length || 0})
             </ThemedText>
-            <TouchableOpacity style={styles.sectionAction}>
+            <TouchableOpacity style={styles.sectionAction} onPress={openInviteModal}>
               <IconSymbol name="person.badge.plus" size={16} color="#007AFF" />
               <ThemedText style={styles.sectionActionText}>Invite</ThemedText>
             </TouchableOpacity>
@@ -814,6 +830,18 @@ export function GroupDetail({
           onSave={handleSettingsSave}
         />
       </Modal>
+
+      {/* Invite Modal */}
+      <InviteModal
+        visible={showInviteModal}
+        onClose={() => setShowInviteModal(false)}
+        onInvite={handleInvite}
+        groupId={group.id.toString()}
+        existingMembers={group.members?.map(member => 
+          typeof member === 'string' ? member : member.user_id?.toString() || ''
+        ) || []}
+        invitedUsers={['2', '5']} // Mock invited users for testing
+      />
     </ThemedView>
   );
 }

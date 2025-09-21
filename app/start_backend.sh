@@ -38,7 +38,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Check if .env file exists
-if [ ! -f ".env" ]; then
+if [ ! -f "../.env" ]; then
     echo "Warning: .env file not found"
     echo "Please copy env.example to .env and configure your settings"
     echo ""
