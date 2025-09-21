@@ -29,6 +29,7 @@ class WeeklyCompilationResponse(BaseModel):
     status: str
     created_at: datetime
     completed_at: Optional[datetime] = None
+    download_url: Optional[str] = None
 
     class Config:
         from_attributes = True

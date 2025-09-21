@@ -10,9 +10,7 @@
         "s3:PutObjectAcl",
         "s3:GetObjectAcl"
       ],
-      "Resource": [
-        "arn:aws:s3:::weave-video-project/*"
-      ]
+      "Resource": ["arn:aws:s3:::weave-video-project/*"]
     },
     {
       "Effect": "Allow",
@@ -21,9 +19,7 @@
         "s3:GetBucketLocation",
         "s3:GetBucketVersioning"
       ],
-      "Resource": [
-        "arn:aws:s3:::weave-video-project"
-      ]
+      "Resource": ["arn:aws:s3:::weave-video-project"]
     },
     {
       "Effect": "Allow",

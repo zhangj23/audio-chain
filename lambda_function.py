@@ -70,6 +70,10 @@ def lambda_handler(event, context):
                     week_end = datetime.fromisoformat(week_end_str.replace('Z', '+00:00'))
                 else:
                     week_end = datetime.fromisoformat(week_end_str)
+                
+                # FIXED: Extend end date to include the full day
+                # Set end time to 23:59:59 of the same day
+                week_end = week_end.replace(hour=23, minute=59, second=59, microsecond=999999)
                     
                 print(f"✅ Parsed dates: {week_start} to {week_end}")
             except Exception as e:
@@ -78,14 +82,20 @@ def lambda_handler(event, context):
                 today = datetime.now()
                 week_start = today - timedelta(days=today.weekday())
                 week_end = week_start + timedelta(days=6)
+                # Also extend the default end date
+                week_end = week_end.replace(hour=23, minute=59, second=59, microsecond=999999)
         else:
             # Default to current week
             today = datetime.now()
             week_start = today - timedelta(days=today.weekday())
             week_end = week_start + timedelta(days=6)
+            # Also extend the default end date
+            week_end = week_end.replace(hour=23, minute=59, second=59, microsecond=999999)
             print(f"⚠️ No date range provided, using default: {week_start} to {week_end}")
         
         print(f"Processing videos for group {group_id}, week: {week_start.strftime('%Y-%m-%d')} to {week_end.strftime('%Y-%m-%d')}")
+        print(f"DEBUG: week_start type: {type(week_start)}, value: {week_start}")
+        print(f"DEBUG: week_end type: {type(week_end)}, value: {week_end}")
         
         # Process the group
         result = process_group_videos(group_id, week_start, week_end, ffmpeg_path, compilation_id)
@@ -113,6 +123,8 @@ def process_group_videos(group_id: int, week_start: datetime, week_end: datetime
     """
     try:
         print(f"🔍 Looking for videos in group {group_id} between {week_start} and {week_end}")
+        print(f"DEBUG: process_group_videos received week_start type: {type(week_start)}, value: {week_start}")
+        print(f"DEBUG: process_group_videos received week_end type: {type(week_end)}, value: {week_end}")
         
         # Get videos for this group and week
         videos = get_group_videos_from_db(group_id, week_start, week_end)
@@ -133,6 +145,9 @@ def process_group_videos(group_id: int, week_start: datetime, week_end: datetime
         # Update compilation status in database
         if compilation_id:
             # Extract S3 key from the compilation URL or construct it
+            # Ensure week_start is a datetime object
+            if isinstance(week_start, str):
+                week_start = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
             compilation_key = f"compilations/{group_id}/{week_start.strftime('%Y%m%d')}_compilation.mp4"
             update_compilation_status(compilation_id, 'completed', compilation_key)
         
@@ -269,6 +284,9 @@ def create_video_compilation(group_id: int, videos: List[Dict[str, Any]], week_s
             
             filter_complex = ';'.join(filter_parts) + f";{''.join(concat_inputs)}concat=n={len(input_files)}:v=1:a=1[outv][outa]"
             
+            # Ensure week_start is a datetime object
+            if isinstance(week_start, str):
+                week_start = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
             compilation_path = os.path.join(temp_dir, f"compilation_{group_id}_{week_start.strftime('%Y%m%d')}.mp4")
             
             cmd.extend([
@@ -339,6 +357,9 @@ def create_intro_card(group_id: int, week_start: datetime, week_end: datetime, t
         intro_path = os.path.join(temp_dir, "intro.mp4")
         
         # Create intro text
+        # Ensure week_start is a datetime object
+        if isinstance(week_start, str):
+            week_start = datetime.fromisoformat(week_start.replace('Z', '+00:00'))
         intro_text = f"Week of {week_start.strftime('%B %d, %Y')}"
         
         # Create intro video using FFmpeg

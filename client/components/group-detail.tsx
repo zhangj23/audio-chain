@@ -86,11 +86,82 @@ export function GroupDetail({
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isCreatingCollage, setIsCreatingCollage] = useState(false);
   const [compilationId, setCompilationId] = useState<number | null>(null); // For future compilation status tracking
+  const [compilations, setCompilations] = useState<any[]>([]);
+  const [isPolling, setIsPolling] = useState(false);
+  const [isLoadingCompilations, setIsLoadingCompilations] = useState(false);
   const videoRef = useRef<Video>(null);
 
   // Note: For now, we only track invited users within the current session
   // In a full implementation, you'd want to fetch existing pending invites
   // when the component loads to show users who were already invited
+
+  // Fetch compilations on component mount
+  useEffect(() => {
+    fetchCompilations();
+  }, [group.id]);
+
+  // Poll for compilation status when a compilation is in progress
+  useEffect(() => {
+    if (compilationId && !isPolling) {
+      setIsPolling(true);
+      pollCompilationStatus(compilationId);
+    }
+  }, [compilationId, isPolling]);
+
+  // Cleanup polling when component unmounts or group changes
+  useEffect(() => {
+    return () => {
+      setIsPolling(false);
+    };
+  }, [group.id]);
+
+  const fetchCompilations = async () => {
+    try {
+      setIsLoadingCompilations(true);
+      const compilationsData = await apiService.getGroupCompilations(group.id);
+      console.log("Fetched compilations:", compilationsData);
+      setCompilations(compilationsData);
+    } catch (error) {
+      console.error("Failed to fetch compilations:", error);
+    } finally {
+      setIsLoadingCompilations(false);
+    }
+  };
+
+  const pollCompilationStatus = async (compilationId: number) => {
+    // Stop polling if we're no longer in polling state
+    if (!isPolling) {
+      return;
+    }
+
+    try {
+      const status = await apiService.getCompilationStatus(compilationId);
+
+      if (status.status === "completed") {
+        // Compilation is done, fetch all compilations for the group
+        await fetchCompilations();
+        setIsPolling(false);
+        setIsCreatingCollage(false);
+      } else if (status.status === "failed") {
+        setIsPolling(false);
+        setIsCreatingCollage(false);
+        // Only show alert once
+        Alert.alert(
+          "Compilation Failed",
+          "The video compilation failed to process."
+        );
+      } else {
+        // Still processing, poll again in 5 seconds only if still polling
+        if (isPolling) {
+          setTimeout(() => pollCompilationStatus(compilationId), 5000);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to check compilation status:", error);
+      setIsPolling(false);
+      setIsCreatingCollage(false);
+    }
+  };
 
   const openSettings = () => {
     setShowSettings(true);
@@ -215,9 +286,16 @@ export function GroupDetail({
   };
 
   const openVideoPlayer = (videoUri: string) => {
+    console.log("openVideoPlayer called with URI:", videoUri);
     setCurrentVideoUri(videoUri);
     setShowVideoPlayer(true);
     setIsVideoPlaying(false);
+    console.log(
+      "Video player state updated - showVideoPlayer:",
+      true,
+      "currentVideoUri:",
+      videoUri
+    );
   };
 
   const closeVideoPlayer = () => {
@@ -427,7 +505,10 @@ export function GroupDetail({
               <View style={styles.berealDot} />
               <ThemedText style={styles.berealDueDate}>
                 {group.deadline_at
-                  ? new Date(group.deadline_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })
+                  ? new Date(group.deadline_at).toLocaleString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
                   : "No deadline"}
               </ThemedText>
             </View>
@@ -518,7 +599,10 @@ export function GroupDetail({
                     : group.isRevealed
                     ? "Complete"
                     : group.deadline_at
-                    ? new Date(group.deadline_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })
+                    ? new Date(group.deadline_at).toLocaleString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
                     : "No deadline"}
                 </ThemedText>
               </View>
@@ -819,6 +903,115 @@ export function GroupDetail({
           </View>
         </View>
 
+        {/* Video Compilations Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>
+              Video Compilations
+            </ThemedText>
+            <TouchableOpacity
+              style={styles.sectionAction}
+              onPress={fetchCompilations}
+            >
+              <IconSymbol name="arrow.clockwise" size={16} color="#007AFF" />
+              <ThemedText style={styles.sectionActionText}>Refresh</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {isLoadingCompilations ? (
+            <View style={styles.loadingContainer}>
+              <ThemedText style={styles.loadingText}>
+                Loading compilations...
+              </ThemedText>
+            </View>
+          ) : compilations.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <IconSymbol name="video.slash" size={32} color="#8E8E93" />
+              <ThemedText style={styles.emptyText}>
+                No compilations yet
+              </ThemedText>
+            </View>
+          ) : (
+            <View style={styles.compilationsList}>
+              {compilations.map((compilation) => (
+                <TouchableOpacity
+                  key={compilation.id}
+                  style={styles.compilationItem}
+                  onPress={() => {
+                    console.log("Compilation clicked:", {
+                      id: compilation.id,
+                      status: compilation.status,
+                      download_url: compilation.download_url,
+                    });
+                    if (
+                      compilation.status === "completed" &&
+                      compilation.download_url
+                    ) {
+                      console.log(
+                        "Opening video player with URL:",
+                        compilation.download_url
+                      );
+                      openVideoPlayer(compilation.download_url);
+                    } else {
+                      console.log(
+                        "Cannot open video - status:",
+                        compilation.status,
+                        "has download_url:",
+                        !!compilation.download_url
+                      );
+                    }
+                  }}
+                >
+                  <View style={styles.compilationIcon}>
+                    <IconSymbol
+                      name="video.fill"
+                      size={20}
+                      color={
+                        compilation.status === "completed"
+                          ? "#4CAF50"
+                          : "#FF9500"
+                      }
+                    />
+                  </View>
+                  <View style={styles.compilationInfo}>
+                    <ThemedText style={styles.compilationTitle}>
+                      Week of{" "}
+                      {new Date(compilation.created_at).toLocaleDateString()}
+                    </ThemedText>
+                    <ThemedText style={styles.compilationStatus}>
+                      {compilation.status === "completed"
+                        ? "✅ Ready"
+                        : compilation.status === "processing"
+                        ? "⏳ Processing..."
+                        : compilation.status === "failed"
+                        ? "❌ Failed"
+                        : compilation.status}
+                    </ThemedText>
+                    {compilation.completed_at && (
+                      <ThemedText style={styles.compilationDate}>
+                        Completed{" "}
+                        {new Date(
+                          compilation.completed_at
+                        ).toLocaleDateString()}
+                      </ThemedText>
+                    )}
+                  </View>
+                  {compilation.status === "completed" &&
+                    compilation.download_url && (
+                      <TouchableOpacity style={styles.compilationPlayButton}>
+                        <IconSymbol
+                          name="play.circle.fill"
+                          size={24}
+                          color="#007AFF"
+                        />
+                      </TouchableOpacity>
+                    )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.actionSection}>
           {group.isWeaved && (
@@ -848,6 +1041,12 @@ export function GroupDetail({
         animationType="fade"
         presentationStyle="fullScreen"
       >
+        {console.log(
+          "Video Player Modal - visible:",
+          showVideoPlayer,
+          "currentVideoUri:",
+          currentVideoUri
+        )}
         <ThemedView style={styles.videoPlayerContainer}>
           {/* Video Player Header */}
           <View style={styles.videoPlayerHeader}>
@@ -1585,5 +1784,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#fff",
     fontWeight: "500",
+  },
+  // Compilation styles
+  loadingContainer: {
+    padding: 20,
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#8E8E93",
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#8E8E93",
+    marginTop: 8,
+  },
+  compilationsList: {
+    gap: 12,
+  },
+  compilationItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  compilationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  compilationInfo: {
+    flex: 1,
+  },
+  compilationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1a1a1a",
+    marginBottom: 4,
+  },
+  compilationStatus: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 2,
+  },
+  compilationDate: {
+    fontSize: 12,
+    color: "#8E8E93",
+  },
+  compilationPlayButton: {
+    padding: 8,
   },
 });

@@ -148,7 +148,11 @@ export default function HomeScreen() {
                 </ThemedText>
                 {group.deadline_at && (
                   <ThemedText style={styles.groupDeadline}>
-                    Deadline: {new Date(group.deadline_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })}
+                    Deadline:{" "}
+                    {new Date(group.deadline_at).toLocaleString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </ThemedText>
                 )}
                 <View style={styles.groupStats}>

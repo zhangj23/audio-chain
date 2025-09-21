@@ -508,6 +508,31 @@ class ApiService {
     );
   }
 
+  // Compilation methods
+  async getCompilationStatus(compilationId: number): Promise<{
+    id: number;
+    group_id: number;
+    status: string;
+    download_url?: string;
+    created_at: string;
+    completed_at?: string;
+  }> {
+    return this.request(`/videos/compilation-status/${compilationId}`);
+  }
+
+  async getGroupCompilations(groupId: number): Promise<
+    {
+      id: number;
+      group_id: number;
+      status: string;
+      download_url?: string;
+      created_at: string;
+      completed_at?: string;
+    }[]
+  > {
+    return this.request(`/videos/compilations/${groupId}`);
+  }
+
   // Utility methods
   isAuthenticated(): boolean {
     return !!this.token;
