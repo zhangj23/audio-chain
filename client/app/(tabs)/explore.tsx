@@ -11,8 +11,9 @@ import {
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useProfile } from "../../contexts/ProfileContext";
+import { videoStorage } from "../../utils/videoStorage";
 import * as ImagePicker from "expo-image-picker";
 
 const { width } = Dimensions.get("window");
@@ -27,7 +28,7 @@ const userData = {
     groupsJoined: 12,
     videosCreated: 47,
     friendsConnected: 23,
-    totalViews: "2.1K",
+    weavesCreated: 8,
   },
   achievements: [
     {
@@ -74,6 +75,87 @@ export default function ProfileScreen() {
   // Profile editing state
   const [editedName, setEditedName] = useState(userName);
   const [editedBio, setEditedBio] = useState(userData.bio);
+
+  // Dynamic counters state
+  const [dynamicStats, setDynamicStats] = useState({
+    groupsJoined: 0,
+    videosCreated: 0,
+    friendsConnected: 0,
+    weavesCreated: 0,
+  });
+
+  // Calculate dynamic stats
+  useEffect(() => {
+    const calculateStats = () => {
+      // Get all videos from storage
+      const allVideos = videoStorage.getAllVideos();
+      const totalVideos = Object.values(allVideos).length;
+
+      // Mock groups data (in a real app, this would come from a groups context/API)
+      const mockGroups = [
+        {
+          id: "1",
+          name: "College Friends 🎓",
+          members: ["You", "Alice", "Mike", "Sara"],
+          videosSubmitted: 2,
+          totalMembers: 4,
+          dueDate: "2h left",
+          prompt: "Show us your vibe right now! ✨",
+          isRevealed: false,
+          isWeaved: false,
+        },
+        {
+          id: "2",
+          name: "Family Fun 👨‍👩‍👧‍👦",
+          members: ["You", "Mom", "Dad", "Sister"],
+          videosSubmitted: 4,
+          totalMembers: 4,
+          dueDate: "Completed",
+          prompt: "What's making you smile rn? 😊",
+          isRevealed: true,
+          isWeaved: true,
+        },
+        {
+          id: "3",
+          name: "Work Squad 💼",
+          members: ["You", "Tom", "Emma", "Chris", "Sam"],
+          videosSubmitted: 1,
+          totalMembers: 5,
+          dueDate: "1d left",
+          prompt: "Drop your main character moment 💫",
+          isRevealed: false,
+          isWeaved: false,
+        },
+      ];
+
+      // Calculate actual stats
+      const groupsJoined = mockGroups.length;
+      const videosCreated = totalVideos;
+      const friendsConnected = mockGroups.reduce((total, group) => {
+        // Count unique friends (excluding "You")
+        return (
+          total + group.members.filter((member) => member !== "You").length
+        );
+      }, 0);
+      const weavesCreated = mockGroups.filter((group) => group.isWeaved).length;
+
+      setDynamicStats({
+        groupsJoined,
+        videosCreated,
+        friendsConnected,
+        weavesCreated,
+      });
+    };
+
+    calculateStats();
+
+    // Subscribe to video storage changes to update counts
+    const unsubscribe = videoStorage.subscribe(() => {
+      calculateStats();
+    });
+
+    return unsubscribe;
+  }, []);
 
   const editProfile = () => {
     if (isEditing) {
@@ -178,27 +260,27 @@ export default function ProfileScreen() {
     <View style={styles.statsContainer}>
       <View style={styles.statItem}>
         <ThemedText style={styles.statNumber}>
-          {userData.stats.groupsJoined}
+          {dynamicStats.groupsJoined}
         </ThemedText>
         <ThemedText style={styles.statLabel}>Groups</ThemedText>
       </View>
       <View style={styles.statItem}>
         <ThemedText style={styles.statNumber}>
-          {userData.stats.videosCreated}
+          {dynamicStats.videosCreated}
         </ThemedText>
         <ThemedText style={styles.statLabel}>Videos</ThemedText>
       </View>
       <View style={styles.statItem}>
         <ThemedText style={styles.statNumber}>
-          {userData.stats.friendsConnected}
+          {dynamicStats.friendsConnected}
         </ThemedText>
         <ThemedText style={styles.statLabel}>Friends</ThemedText>
       </View>
       <View style={styles.statItem}>
         <ThemedText style={styles.statNumber}>
-          {userData.stats.totalViews}
+          {dynamicStats.weavesCreated}
         </ThemedText>
-        <ThemedText style={styles.statLabel}>Views</ThemedText>
+        <ThemedText style={styles.statLabel}>Weaves</ThemedText>
       </View>
     </View>
   );

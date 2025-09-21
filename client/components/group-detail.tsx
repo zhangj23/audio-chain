@@ -26,6 +26,7 @@ interface GroupDetailProps {
     dueDate: string;
     prompt: string;
     isRevealed: boolean;
+    isWeaved?: boolean; // New state for after weaving is complete
   };
   onBack: () => void;
   onRecord: (groupId: string) => void;
@@ -97,16 +98,23 @@ export function GroupDetail({
     const memberCount = group.members.length;
     const screenWidth = width - 40; // Account for padding
 
-    if (memberCount <= 2) {
-      return {
-        columns: memberCount,
-        tileWidth: (screenWidth - 12) / memberCount,
-      };
-    } else if (memberCount <= 4) {
-      return { columns: 2, tileWidth: (screenWidth - 12) / 2 };
-    } else {
-      return { columns: 3, tileWidth: (screenWidth - 24) / 3 };
+    // Always calculate tile width based on 3 columns for consistency in small groups
+    // But use actual column count for layout logic
+    let displayColumns = Math.max(3, Math.min(memberCount, 4)); // Max 4 columns for readability
+
+    // For very large groups (8+), use 4 columns
+    if (memberCount >= 8) {
+      displayColumns = 4;
     }
+
+    // Always use minimum 3 columns for tile width calculation to maintain consistent sizing
+    const tileWidthColumns = Math.max(3, displayColumns);
+    const gap = (tileWidthColumns - 1) * 12; // 12px gap between columns
+
+    return {
+      columns: displayColumns,
+      tileWidth: (screenWidth - gap) / tileWidthColumns,
+    };
   };
 
   const renderMemberGrid = () => {
@@ -118,11 +126,12 @@ export function GroupDetail({
           const hasSubmitted = index < group.videosSubmitted;
           const isYou = member === "You";
 
-          // Only allow viewing your own video, or any video if group is revealed
+          // If weaved, no individual videos can be viewed
           const userHasSubmittedVideo = isYou && submittedVideo;
-          const canViewVideo =
-            (isYou && userHasSubmittedVideo) ||
-            (group.isRevealed && hasSubmitted);
+          const canViewVideo = group.isWeaved
+            ? false // No individual videos viewable after weaving
+            : (isYou && userHasSubmittedVideo) ||
+              (group.isRevealed && hasSubmitted);
           const actuallyHasSubmitted = hasSubmitted || userHasSubmittedVideo;
 
           return (
@@ -223,77 +232,385 @@ export function GroupDetail({
 
   return (
     <ThemedView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={onBack}>
-          <IconSymbol name="chevron.left" size={24} color="#fff" />
-        </TouchableOpacity>
-        <ThemedText style={styles.headerTitle}>{group.name}</ThemedText>
-        <TouchableOpacity style={styles.moreButton} onPress={openSettings}>
-          <IconSymbol name="ellipsis" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      {/* BeReal Style Header */}
+      <View style={styles.berealHeader}>
+        <View style={styles.berealHeaderRow}>
+          <TouchableOpacity style={styles.berealBackButton} onPress={onBack}>
+            <IconSymbol name="chevron.left" size={24} color="#fff" />
+          </TouchableOpacity>
 
-      <ScrollView style={styles.content}>
-        {/* Group Info */}
-        <View style={styles.groupInfo}>
-          <ThemedText style={styles.prompt}>"{group.prompt}"</ThemedText>
-
-          {/* Progress */}
-          <View style={styles.progressContainer}>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  {
-                    width: `${
-                      (group.videosSubmitted / group.totalMembers) * 100
-                    }%`,
-                  },
-                ]}
-              />
-            </View>
-            <ThemedText style={styles.progressText}>
-              {group.videosSubmitted}/{group.totalMembers} videos submitted
+          <View style={styles.berealHeaderContent}>
+            <ThemedText style={styles.berealHeaderTitle}>
+              {group.name}
             </ThemedText>
+            <View style={styles.berealHeaderStats}>
+              <ThemedText style={styles.berealMemberCount}>
+                {group.totalMembers} members
+              </ThemedText>
+              <View style={styles.berealDot} />
+              <ThemedText style={styles.berealDueDate}>
+                {group.dueDate}
+              </ThemedText>
+            </View>
           </View>
 
-          <View style={styles.dueDateContainer}>
-            <IconSymbol name="clock" size={16} color="#ff9500" />
-            <ThemedText style={styles.dueDate}>{group.dueDate}</ThemedText>
+          <TouchableOpacity
+            style={styles.berealMoreButton}
+            onPress={openSettings}
+          >
+            <IconSymbol name="ellipsis" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Enhanced Group Hero Section */}
+        <View style={styles.heroSection}>
+          {/* Group Cover/Background */}
+          <View style={styles.groupCover}>
+            <View style={styles.coverGradient}>
+              <ThemedText style={styles.promptLarge}>
+                &quot;{group.prompt}&quot;
+              </ThemedText>
+            </View>
+          </View>
+
+          {/* Group Stats Card */}
+          <View style={styles.statsCard}>
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statNumber}>
+                  {group.videosSubmitted}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Submitted</ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statNumber}>
+                  {group.totalMembers}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Members</ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statNumber}>
+                  {Math.round(
+                    (group.videosSubmitted / group.totalMembers) * 100
+                  )}
+                  %
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>Complete</ThemedText>
+              </View>
+            </View>
+
+            {/* Due Date with Status */}
+            <View style={styles.dueDateContainer}>
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor: group.isWeaved
+                      ? "#9C27B0"
+                      : group.isRevealed
+                      ? "#4CAF50"
+                      : "#ff9500",
+                  },
+                ]}
+              >
+                <IconSymbol
+                  name={
+                    group.isWeaved
+                      ? "play.circle.fill"
+                      : group.isRevealed
+                      ? "checkmark.circle.fill"
+                      : "clock.fill"
+                  }
+                  size={14}
+                  color="#fff"
+                />
+                <ThemedText style={styles.statusText}>
+                  {group.isWeaved
+                    ? "Ready to View"
+                    : group.isRevealed
+                    ? "Complete"
+                    : group.dueDate}
+                </ThemedText>
+              </View>
+
+              {/* Action button next to status */}
+              {group.isWeaved ? (
+                <TouchableOpacity
+                  style={styles.viewButtonCompact}
+                  onPress={() => {
+                    // TODO: Navigate to compiled video viewer
+                    console.log(
+                      "View Weaved Video pressed for group:",
+                      group.name
+                    );
+                  }}
+                >
+                  <IconSymbol name="play.fill" size={16} color="#fff" />
+                  <ThemedText style={styles.viewButtonCompactText}>
+                    View
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : group.isRevealed ? (
+                <TouchableOpacity
+                  style={styles.weaveButtonCompact}
+                  onPress={() => {
+                    // TODO: Navigate to weaving/compilation screen
+                    console.log("Let's Weave pressed for group:", group.name);
+                  }}
+                >
+                  <IconSymbol name="wand.and.stars" size={16} color="#fff" />
+                  <ThemedText style={styles.weaveButtonCompactText}>
+                    Let's Weave
+                  </ThemedText>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
         </View>
 
-        {/* Members */}
+        {/* Activity Feed Section */}
         <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>
-            {group.totalMembers} members
-          </ThemedText>
-          {renderMemberGrid()}
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Recent Activity</ThemedText>
+            <TouchableOpacity style={styles.sectionAction}>
+              <ThemedText style={styles.sectionActionText}>View All</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.activityFeed}>
+            {/* Activity Items */}
+            <View style={styles.activityItem}>
+              <View style={styles.activityIcon}>
+                <IconSymbol name="video.fill" size={16} color="#4CAF50" />
+              </View>
+              <View style={styles.activityContent}>
+                <ThemedText style={styles.activityText}>
+                  <ThemedText style={styles.activityUser}>You</ThemedText>{" "}
+                  submitted a video
+                </ThemedText>
+                <ThemedText style={styles.activityTime}>
+                  2 minutes ago
+                </ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.activityItem}>
+              <View style={styles.activityIcon}>
+                <IconSymbol name="video.fill" size={16} color="#4CAF50" />
+              </View>
+              <View style={styles.activityContent}>
+                <ThemedText style={styles.activityText}>
+                  <ThemedText style={styles.activityUser}>Alice</ThemedText>{" "}
+                  submitted a video
+                </ThemedText>
+                <ThemedText style={styles.activityTime}>1 hour ago</ThemedText>
+              </View>
+            </View>
+
+            <View style={styles.activityItem}>
+              <View style={styles.activityIcon}>
+                <IconSymbol
+                  name="person.badge.plus"
+                  size={16}
+                  color="#007AFF"
+                />
+              </View>
+              <View style={styles.activityContent}>
+                <ThemedText style={styles.activityText}>
+                  <ThemedText style={styles.activityUser}>Mike</ThemedText>{" "}
+                  joined the group
+                </ThemedText>
+                <ThemedText style={styles.activityTime}>2 hours ago</ThemedText>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* Video Grid Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>
+              {group.isWeaved
+                ? "Weaved Video"
+                : `Videos (${group.videosSubmitted}/${group.totalMembers})`}
+            </ThemedText>
+            {group.isWeaved ? (
+              <TouchableOpacity
+                style={styles.sectionAction}
+                onPress={() => {
+                  // TODO: Navigate to compiled video viewer
+                  console.log(
+                    "View Weaved Video pressed for group:",
+                    group.name
+                  );
+                }}
+              >
+                <IconSymbol name="play.circle.fill" size={16} color="#9C27B0" />
+                <ThemedText style={styles.sectionActionText}>Watch</ThemedText>
+              </TouchableOpacity>
+            ) : group.isRevealed ? (
+              <TouchableOpacity
+                style={styles.sectionAction}
+                onPress={() => onWatchVideos(group)}
+              >
+                <IconSymbol name="play.circle" size={16} color="#007AFF" />
+                <ThemedText style={styles.sectionActionText}>
+                  Watch All
+                </ThemedText>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          {group.isWeaved ? (
+            // Show weaved video preview instead of individual tiles
+            <View style={styles.weavedVideoPreview}>
+              <TouchableOpacity
+                style={styles.weavedVideoContainer}
+                onPress={() => {
+                  // TODO: Navigate to compiled video viewer
+                  console.log(
+                    "View Weaved Video pressed for group:",
+                    group.name
+                  );
+                }}
+              >
+                <View style={styles.weavedVideoThumbnail}>
+                  <IconSymbol
+                    name="play.circle.fill"
+                    size={48}
+                    color="#9C27B0"
+                  />
+                </View>
+                <View style={styles.weavedVideoInfo}>
+                  <ThemedText style={styles.weavedVideoTitle}>
+                    {group.name} - Compilation
+                  </ThemedText>
+                  <ThemedText style={styles.weavedVideoSubtitle}>
+                    All {group.totalMembers} videos woven together
+                  </ThemedText>
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            renderMemberGrid()
+          )}
+        </View>
+
+        {/* Enhanced Members Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>
+              Members ({group.totalMembers})
+            </ThemedText>
+            <TouchableOpacity style={styles.sectionAction}>
+              <IconSymbol name="person.badge.plus" size={16} color="#007AFF" />
+              <ThemedText style={styles.sectionActionText}>Invite</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {/* Member List with Enhanced Cards */}
+          <View style={styles.memberList}>
+            {group.members.map((member, index) => {
+              const hasSubmitted = index < group.videosSubmitted;
+              const isYou = member === "You";
+              const userHasSubmittedVideo = isYou && submittedVideo;
+              const actuallyHasSubmitted =
+                hasSubmitted || userHasSubmittedVideo;
+
+              return (
+                <View key={index} style={styles.memberCard}>
+                  <View style={styles.memberInfo}>
+                    <View
+                      style={[
+                        styles.memberAvatar,
+                        actuallyHasSubmitted && styles.memberAvatarSubmitted,
+                      ]}
+                    >
+                      <ThemedText style={styles.memberInitial}>
+                        {member.charAt(0)}
+                      </ThemedText>
+                      {actuallyHasSubmitted && (
+                        <View style={styles.submittedBadge}>
+                          <IconSymbol name="checkmark" size={8} color="#fff" />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.memberDetails}>
+                      <ThemedText style={styles.memberNameCard}>
+                        {isYou ? "You" : member}
+                      </ThemedText>
+                      <ThemedText style={styles.memberStatus}>
+                        {actuallyHasSubmitted
+                          ? group.isRevealed
+                            ? "Video ready"
+                            : "Submitted"
+                          : "Pending..."}
+                      </ThemedText>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.memberAction}
+                    onPress={() => {
+                      if (actuallyHasSubmitted && (isYou || group.isRevealed)) {
+                        if (userHasSubmittedVideo && submittedVideo) {
+                          openVideoPlayer(submittedVideo.uri);
+                        }
+                      } else if (!actuallyHasSubmitted && isYou) {
+                        onRecord(group.id);
+                      }
+                    }}
+                  >
+                    {actuallyHasSubmitted ? (
+                      <IconSymbol
+                        name={
+                          group.isRevealed || isYou
+                            ? "play.circle"
+                            : "lock.circle"
+                        }
+                        size={20}
+                        color={group.isRevealed || isYou ? "#4CAF50" : "#666"}
+                      />
+                    ) : isYou ? (
+                      <IconSymbol
+                        name="plus.circle"
+                        size={20}
+                        color="#007AFF"
+                      />
+                    ) : (
+                      <IconSymbol name="clock" size={20} color="#666" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
         </View>
 
         {/* Action Buttons */}
         <View style={styles.actionSection}>
-          {group.isRevealed ? (
+          {group.isWeaved && (
+            // Weaved state - only show weaved video option
             <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={() => onWatchVideos(group)}
+              style={styles.primaryWeavedButton}
+              onPress={() => {
+                // TODO: Navigate to compiled video viewer
+                console.log(
+                  "View Compiled Video pressed for group:",
+                  group.name
+                );
+              }}
             >
               <IconSymbol name="play.circle.fill" size={24} color="#fff" />
-              <ThemedText style={styles.primaryButtonText}>
-                Watch All Videos
+              <ThemedText style={styles.primaryWeavedButtonText}>
+                Watch Weaved Video
               </ThemedText>
             </TouchableOpacity>
-          ) : (
-            <View style={styles.waitingContainer}>
-              <IconSymbol name="hourglass" size={40} color="#666" />
-              <ThemedText style={styles.waitingTitle}>
-                Waiting for everyone...
-              </ThemedText>
-              <ThemedText style={styles.waitingSubtitle}>
-                Videos will be revealed when all members submit
-              </ThemedText>
-            </View>
           )}
         </View>
       </ScrollView>
@@ -400,30 +717,67 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
+  // BeReal Style Header
+  berealHeader: {
+    backgroundColor: "#000",
     paddingTop: 60,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+    paddingBottom: 24,
+    paddingHorizontal: 20,
   },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#fff",
+  berealHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  berealBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#333",
     justifyContent: "center",
     alignItems: "center",
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  berealMoreButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  berealHeaderContent: {
     flex: 1,
-    textAlign: "center",
+    alignItems: "center",
+    paddingHorizontal: 16,
+  },
+  berealHeaderTitle: {
+    fontSize: 20,
+    fontWeight: "900",
     color: "#fff",
+    textAlign: "center",
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  berealHeaderStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  berealMemberCount: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#888",
+  },
+  berealDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "#888",
+  },
+  berealDueDate: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#888",
   },
   moreButton: {
     width: 32,
@@ -436,62 +790,290 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  groupInfo: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
-  },
-  prompt: {
-    fontSize: 16,
-    textAlign: "center",
+  heroSection: {
     marginBottom: 20,
-    color: "#ccc",
-    fontWeight: "400",
   },
-  progressContainer: {
-    marginBottom: 16,
+  groupCover: {
+    height: 200,
+    backgroundColor: "#1a1a1a",
+    position: "relative",
+    overflow: "hidden",
   },
-  progressBar: {
-    height: 4,
-    backgroundColor: "#333",
-    borderRadius: 2,
-    marginBottom: 8,
+  coverGradient: {
+    flex: 1,
+    backgroundColor: "linear-gradient(45deg, #007AFF, #4CAF50)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 30,
   },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#fff",
-    borderRadius: 2,
-  },
-  progressText: {
-    fontSize: 12,
+  promptLarge: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#fff",
     textAlign: "center",
+    lineHeight: 32,
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  statsCard: {
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 20,
+    marginTop: -30,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  statsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 20,
+  },
+  statItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
     color: "#888",
     fontWeight: "500",
+    textTransform: "uppercase",
+  },
+  statDivider: {
+    width: 1,
+    backgroundColor: "#333",
+    marginHorizontal: 10,
   },
   dueDateContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 12,
   },
-  dueDate: {
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  statusText: {
     fontSize: 12,
-    fontWeight: "500",
-    color: "#888",
+    fontWeight: "600",
+    color: "#fff",
+  },
+  weaveButtonCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#667eea",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: "#667eea",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  weaveButtonCompactText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  viewButtonCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#9C27B0",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: "#9C27B0",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  viewButtonCompactText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#fff",
   },
   section: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
   },
   sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  sectionAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  sectionActionText: {
+    fontSize: 14,
+    color: "#007AFF",
+    fontWeight: "500",
+  },
+  activityFeed: {
+    gap: 12,
+  },
+  activityItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  activityIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(76, 175, 80, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityText: {
+    fontSize: 14,
+    color: "#ccc",
+    marginBottom: 2,
+  },
+  activityUser: {
+    fontWeight: "600",
+    color: "#fff",
+  },
+  activityTime: {
+    fontSize: 12,
+    color: "#888",
+  },
+  memberList: {
+    gap: 12,
+  },
+  memberCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  memberInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  memberAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+    position: "relative",
+  },
+  memberAvatarSubmitted: {
+    borderWidth: 3,
+    borderColor: "#4CAF50",
+  },
+  memberInitial: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  submittedBadge: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#4CAF50",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#1a1a1a",
+  },
+  memberDetails: {
+    flex: 1,
+  },
+  memberNameCard: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 2,
+  },
+  memberStatus: {
+    fontSize: 12,
+    color: "#888",
+    fontWeight: "500",
+  },
+  memberAction: {
+    padding: 8,
+  },
+  // Weaved Video Preview Styles
+  weavedVideoPreview: {
+    marginTop: 8,
+  },
+  weavedVideoContainer: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    borderWidth: 2,
+    borderColor: "#9C27B0",
+  },
+  weavedVideoThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  weavedVideoInfo: {
+    flex: 1,
+  },
+  weavedVideoTitle: {
     fontSize: 16,
     fontWeight: "700",
-    marginBottom: 16,
     color: "#fff",
+    marginBottom: 4,
+  },
+  weavedVideoSubtitle: {
+    fontSize: 14,
+    color: "#888",
+    fontWeight: "500",
   },
   videoGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
+    marginTop: 4,
   },
   videoTile: {
     marginBottom: 12,
@@ -569,6 +1151,61 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 16,
   },
+  completedActions: {
+    gap: 12,
+  },
+  weavedActions: {
+    gap: 12,
+  },
+  primaryWeavedButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#9C27B0",
+    borderRadius: 20,
+    paddingVertical: 16,
+    gap: 8,
+    shadowColor: "#9C27B0",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  primaryWeavedButtonText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  weaveButton: {
+    backgroundColor: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#667eea",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  weaveButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  weaveButtonText: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  weaveButtonTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 2,
+  },
+  weaveButtonSubtitle: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.8)",
+    fontWeight: "500",
+  },
   primaryButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -582,35 +1219,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#fff",
-  },
-  secondaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0, 122, 255, 0.1)",
-    borderRadius: 25,
-    paddingVertical: 16,
-    gap: 8,
-  },
-  secondaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#007AFF",
-  },
-  waitingContainer: {
-    alignItems: "center",
-    paddingVertical: 30,
-  },
-  waitingTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  waitingSubtitle: {
-    fontSize: 14,
-    opacity: 0.7,
-    textAlign: "center",
   },
   yourVideoIndicator: {
     position: "absolute",
