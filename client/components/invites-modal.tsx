@@ -38,14 +38,29 @@ export function InvitesModal({
     try {
       setLoading(true);
       const pendingInvites = await apiService.getPendingInvites();
+      console.log("InvitesModal - Fetched invites:", pendingInvites);
+
+      // Filter out any undefined or invalid invites
+      const validInvites = pendingInvites.filter(
+        (invite) =>
+          invite && invite.id && invite.group_id && invite.invited_username
+      );
+
+      console.log(
+        "InvitesModal - Valid invites after filtering:",
+        validInvites
+      );
+
       // Sort by created_at descending (most recent first)
-      const sortedInvites = pendingInvites.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      const sortedInvites = validInvites.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       setInvites(sortedInvites);
     } catch (error) {
       console.error("Failed to fetch invites:", error);
       Alert.alert("Error", "Failed to load invites. Please try again.");
+      setInvites([]);
     } finally {
       setLoading(false);
     }
@@ -55,10 +70,10 @@ export function InvitesModal({
     try {
       setProcessingInvite(inviteId);
       await apiService.acceptInvite(inviteId);
-      
+
       // Remove the accepted invite from the list
-      setInvites(prev => prev.filter(invite => invite.id !== inviteId));
-      
+      setInvites((prev) => prev.filter((invite) => invite.id !== inviteId));
+
       Alert.alert("Success", "You've joined the group!");
       onInviteAccepted?.();
     } catch (error) {
@@ -73,10 +88,10 @@ export function InvitesModal({
     try {
       setProcessingInvite(inviteId);
       await apiService.declineInvite(inviteId);
-      
+
       // Remove the declined invite from the list
-      setInvites(prev => prev.filter(invite => invite.id !== inviteId));
-      
+      setInvites((prev) => prev.filter((invite) => invite.id !== inviteId));
+
       Alert.alert("Success", "Invite declined.");
     } catch (error) {
       console.error("Failed to decline invite:", error);
@@ -89,8 +104,10 @@ export function InvitesModal({
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
+    const diffInHours = Math.floor(
+      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+    );
+
     if (diffInHours < 1) {
       return "Just now";
     } else if (diffInHours < 24) {
@@ -126,74 +143,96 @@ export function InvitesModal({
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#007AFF" />
-            <ThemedText style={styles.loadingText}>Loading invites...</ThemedText>
+            <ThemedText style={styles.loadingText}>
+              Loading invites...
+            </ThemedText>
           </View>
         ) : invites.length === 0 ? (
           <View style={styles.emptyState}>
             <IconSymbol name="envelope" size={48} color="#8E8E93" />
-            <ThemedText style={styles.emptyTitle}>No pending invites</ThemedText>
+            <ThemedText style={styles.emptyTitle}>
+              No pending invites
+            </ThemedText>
             <ThemedText style={styles.emptySubtitle}>
               You don't have any group invitations at the moment
             </ThemedText>
           </View>
         ) : (
-          <ScrollView style={styles.invitesList} showsVerticalScrollIndicator={false}>
-            {invites.map((invite) => (
-              <View key={invite.id} style={styles.inviteCard}>
-                <View style={styles.inviteHeader}>
-                  <View style={styles.inviteInfo}>
-                    <ThemedText style={styles.groupName}>
-                      {invite.group.name}
-                    </ThemedText>
-                    <ThemedText style={styles.invitedBy}>
-                      Invited by {invite.invited_by_user.username}
-                    </ThemedText>
-                    <ThemedText style={styles.inviteDate}>
-                      {formatDate(invite.created_at)}
-                    </ThemedText>
+          <ScrollView
+            style={styles.invitesList}
+            showsVerticalScrollIndicator={false}
+          >
+            {invites
+              .filter(
+                (invite) =>
+                  invite &&
+                  invite.id &&
+                  invite.group_id &&
+                  invite.invited_username
+              )
+              .map((invite) => (
+                <View key={invite.id} style={styles.inviteCard}>
+                  <View style={styles.inviteHeader}>
+                    <View style={styles.inviteInfo}>
+                      <ThemedText style={styles.groupName}>
+                        {invite.group?.name || `Group ${invite.group_id}`}
+                      </ThemedText>
+                      <ThemedText style={styles.invitedBy}>
+                        Invited by{" "}
+                        {invite.invited_by_user?.username || "Unknown User"}
+                      </ThemedText>
+                      <ThemedText style={styles.inviteDate}>
+                        {formatDate(invite.created_at)}
+                      </ThemedText>
+                    </View>
+                    {isExpired(invite.expires_at) && (
+                      <View style={styles.expiredBadge}>
+                        <ThemedText style={styles.expiredText}>
+                          Expired
+                        </ThemedText>
+                      </View>
+                    )}
                   </View>
-                  {isExpired(invite.expires_at) && (
-                    <View style={styles.expiredBadge}>
-                      <ThemedText style={styles.expiredText}>Expired</ThemedText>
+
+                  {invite.group?.description && (
+                    <ThemedText style={styles.groupDescription}>
+                      {invite.group.description}
+                    </ThemedText>
+                  )}
+
+                  {!isExpired(invite.expires_at) && (
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.declineButton]}
+                        onPress={() => handleDeclineInvite(invite.id)}
+                        disabled={processingInvite === invite.id}
+                      >
+                        {processingInvite === invite.id ? (
+                          <ActivityIndicator size="small" color="#FF3B30" />
+                        ) : (
+                          <ThemedText style={styles.declineButtonText}>
+                            Decline
+                          </ThemedText>
+                        )}
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.actionButton, styles.acceptButton]}
+                        onPress={() => handleAcceptInvite(invite.id)}
+                        disabled={processingInvite === invite.id}
+                      >
+                        {processingInvite === invite.id ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <ThemedText style={styles.acceptButtonText}>
+                            Accept
+                          </ThemedText>
+                        )}
+                      </TouchableOpacity>
                     </View>
                   )}
                 </View>
-                
-                {invite.group.description && (
-                  <ThemedText style={styles.groupDescription}>
-                    {invite.group.description}
-                  </ThemedText>
-                )}
-
-                {!isExpired(invite.expires_at) && (
-                  <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.declineButton]}
-                      onPress={() => handleDeclineInvite(invite.id)}
-                      disabled={processingInvite === invite.id}
-                    >
-                      {processingInvite === invite.id ? (
-                        <ActivityIndicator size="small" color="#FF3B30" />
-                      ) : (
-                        <ThemedText style={styles.declineButtonText}>Decline</ThemedText>
-                      )}
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[styles.actionButton, styles.acceptButton]}
-                      onPress={() => handleAcceptInvite(invite.id)}
-                      disabled={processingInvite === invite.id}
-                    >
-                      {processingInvite === invite.id ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <ThemedText style={styles.acceptButtonText}>Accept</ThemedText>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))}
+              ))}
           </ScrollView>
         )}
       </ThemedView>

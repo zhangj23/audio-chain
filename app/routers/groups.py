@@ -278,6 +278,10 @@ async def get_pending_invites(
         joinedload(GroupPendingRequest.inviter)
     ).all()
     
+    print(f"DEBUG: Found {len(pending_requests)} pending requests")
+    for pr in pending_requests:
+        print(f"DEBUG: Request {pr.id} - Group: {pr.group.name if pr.group else 'None'}, Inviter: {pr.inviter.username if pr.inviter else 'None'}")
+    
     result = []
     for pr in pending_requests:
         # Check if expired
