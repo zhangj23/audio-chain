@@ -5,6 +5,7 @@ from typing import List, Optional
 class GroupBase(BaseModel):
     name: str
     description: Optional[str] = None
+    deadline_at: Optional[datetime] = None
 
 class GroupCreate(GroupBase):
     invited_usernames: Optional[List[str]] = []  # List of usernames to invite
@@ -81,7 +82,29 @@ class GroupInviteResponse(BaseModel):
 class GroupWithMembers(GroupResponse):
     members: List[GroupMemberWithUserResponse] = []
     pending_requests: List[GroupPendingRequestResponse] = []
+    current_prompt: Optional[dict] = None  # Current prompt for this group
 
 class GroupCreateResponse(GroupResponse):
     pending_requests: List[GroupPendingRequestResponse] = []
+    message: str
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+class GroupUpdateResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    message: str
+
+class PromptUpdate(BaseModel):
+    text: str
+    week_start: Optional[datetime] = None
+    week_end: Optional[datetime] = None
+
+class PromptUpdateResponse(BaseModel):
+    id: int
+    text: str
+    group_id: int
     message: str

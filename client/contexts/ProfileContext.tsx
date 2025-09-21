@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useAuth } from './AuthContext';
 
 interface ProfileContextType {
   profileImage: string | null;
@@ -11,7 +12,17 @@ const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [userName, setUserName] = useState("Alex Johnson");
+  const [userName, setUserName] = useState("");
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      setUserName(user.username || user.email);
+      if ((user as any).profile_pic_url) {
+        setProfileImage((user as any).profile_pic_url);
+      }
+    }
+  }, [user]);
 
   return (
     <ProfileContext.Provider value={{

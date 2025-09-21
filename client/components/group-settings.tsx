@@ -151,6 +151,10 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
   };
 
   const saveChanges = () => {
+    console.log("GroupSettings - saveChanges called with:", {
+      name: groupName,
+      prompt: selectedPrompt,
+    });
     onSave({
       name: groupName,
       prompt: selectedPrompt,
@@ -218,7 +222,11 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Group Identity */}
         <View style={styles.section}>
           <ThemedText style={styles.sectionTitle}>✨ Group Identity</ThemedText>

@@ -14,6 +14,7 @@ export interface Group {
   id: number;
   name: string;
   description?: string;
+  deadline_at?: string;
   owner_id: number;
   created_at: string;
   members: GroupMember[];
@@ -271,10 +272,15 @@ class ApiService {
     return this.request<Group[]>(API_CONFIG.ENDPOINTS.GROUPS.LIST);
   }
 
-  async createGroup(name: string, description?: string): Promise<Group> {
+  async createGroup(
+    name: string,
+    description?: string,
+    deadline_at?: string
+  ): Promise<Group> {
     console.log("API Service - createGroup called with:", {
       name,
       description,
+      deadline_at,
     });
     console.log(
       "API Service - Making request to:",
@@ -288,7 +294,7 @@ class ApiService {
         API_CONFIG.ENDPOINTS.GROUPS.CREATE,
         {
           method: "POST",
-          body: JSON.stringify({ name, description }),
+          body: JSON.stringify({ name, description, deadline_at }),
         }
       );
 
@@ -322,7 +328,10 @@ class ApiService {
     );
   }
 
-  async inviteUsers(groupId: number, usernames: string[]): Promise<{
+  async inviteUsers(
+    groupId: number,
+    usernames: string[]
+  ): Promise<{
     message: string;
     successful_invites: string[];
     failed_invites: string[];
@@ -337,18 +346,66 @@ class ApiService {
     });
   }
 
-  async getUsers(): Promise<{
-    id: number;
-    username: string;
-    email: string;
-    created_at: string;
-  }[]> {
-    return this.request<{
+  async getUsers(): Promise<
+    {
       id: number;
       username: string;
       email: string;
       created_at: string;
-    }[]>(API_CONFIG.ENDPOINTS.GROUPS.USERS);
+    }[]
+  > {
+    return this.request<
+      {
+        id: number;
+        username: string;
+        email: string;
+        created_at: string;
+      }[]
+    >(API_CONFIG.ENDPOINTS.GROUPS.USERS);
+  }
+
+  async updateGroupSettings(
+    groupId: number,
+    updates: { name?: string; description?: string }
+  ): Promise<{
+    id: number;
+    name: string;
+    description?: string;
+    message: string;
+  }> {
+    return this.request<{
+      id: number;
+      name: string;
+      description?: string;
+      message: string;
+    }>(`/groups/${groupId}/settings`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async updateGroupPrompt(
+    groupId: number,
+    promptText: string
+  ): Promise<{ id: number; text: string; group_id: number; message: string }> {
+    console.log("API Service - updateGroupPrompt called with:", {
+      groupId,
+      promptText,
+    });
+    console.log(
+      "API Service - Making request to:",
+      `/groups/${groupId}/prompt`
+    );
+
+    return this.request<{
+      id: number;
+      text: string;
+      group_id: number;
+      message: string;
+    }>(`/groups/${groupId}/prompt`, {
+      method: "PUT",
+      body: JSON.stringify({ text: promptText }),
+    });
   }
 
   // Invite methods
@@ -485,6 +542,31 @@ class ApiService {
     return this.request<{ id: number; name: string; s3_key: string }[]>(
       API_CONFIG.ENDPOINTS.VIDEOS.MUSIC_TRACKS
     );
+  }
+
+  // Compilation methods
+  async getCompilationStatus(compilationId: number): Promise<{
+    id: number;
+    group_id: number;
+    status: string;
+    download_url?: string;
+    created_at: string;
+    completed_at?: string;
+  }> {
+    return this.request(`/videos/compilation-status/${compilationId}`);
+  }
+
+  async getGroupCompilations(groupId: number): Promise<
+    {
+      id: number;
+      group_id: number;
+      status: string;
+      download_url?: string;
+      created_at: string;
+      completed_at?: string;
+    }[]
+  > {
+    return this.request(`/videos/compilations/${groupId}`);
   }
 
   // Utility methods

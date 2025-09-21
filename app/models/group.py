@@ -14,6 +14,7 @@ class Group(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    deadline_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     creator = relationship("User", back_populates="created_groups")
@@ -21,6 +22,7 @@ class Group(Base):
     pending_requests = relationship("GroupPendingRequest", back_populates="group")
     video_submissions = relationship("VideoSubmission", back_populates="group")
     weekly_compilations = relationship("WeeklyCompilation", back_populates="group")
+    prompts = relationship("Prompt", back_populates="group")
 
 class GroupMember(Base):
     __tablename__ = "group_members"

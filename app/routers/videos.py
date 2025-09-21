@@ -142,7 +142,7 @@ async def get_group_submissions(
     
     return submissions
 
-@router.get("/compilations/{group_id}", response_model=List[WeeklyCompilationResponse])
+@router.get("/compilations/{group_id}")
 async def get_group_compilations(
     group_id: int,
     current_user: User = Depends(get_current_user),
@@ -164,7 +164,45 @@ async def get_group_compilations(
         WeeklyCompilation.group_id == group_id
     ).all()
     
-    return compilations
+    # Process compilations to add download URLs for completed ones
+    result = []
+    for comp in compilations:
+        compilation_data = {
+            "id": comp.id,
+            "group_id": comp.group_id,
+            "status": comp.status,
+            "s3_key": comp.s3_key,
+            "created_at": comp.created_at.isoformat() if comp.created_at else None,
+            "completed_at": comp.completed_at.isoformat() if comp.completed_at else None,
+            "week_start": comp.week_start.isoformat() if comp.week_start else None,
+            "week_end": comp.week_end.isoformat() if comp.week_end else None,
+            "music_track_id": comp.music_track_id
+        }
+        
+        # If compilation is completed, include download URL
+        if comp.status == "completed" and comp.s3_key:
+            try:
+                print(f"DEBUG: Generating download URL for compilation {comp.id}")
+                print(f"DEBUG: S3_BUCKET_NAME: {AWS_BUCKET_NAME}")
+                print(f"DEBUG: S3_KEY: {comp.s3_key}")
+                download_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': AWS_BUCKET_NAME, 'Key': comp.s3_key},
+                    ExpiresIn=3600  # 1 hour
+                )
+                print(f"DEBUG: Generated download URL: {download_url}")
+                compilation_data["download_url"] = download_url
+            except Exception as e:
+                print(f"Error generating download URL for compilation {comp.id}: {e}")
+                print(f"DEBUG: Exception details: {type(e).__name__}: {str(e)}")
+        
+        result.append(compilation_data)
+    
+    print(f"DEBUG: Returning {len(result)} compilations")
+    for comp in result:
+        print(f"DEBUG: Compilation {comp['id']}: status={comp['status']}, download_url={'present' if 'download_url' in comp else 'missing'}")
+    
+    return result
 
 @router.get("/music-tracks", response_model=List[MusicTrackResponse])
 async def get_music_tracks(
@@ -252,7 +290,10 @@ async def generate_compilation(
         VideoSubmission.group_id == group_id
     ).all()
     
+    print(f"DEBUG: Found {len(submissions)} submissions for group {group_id}")
+    
     if not submissions:
+        print(f"DEBUG: No submissions found for group {group_id}")
         raise HTTPException(
             status_code=400,
             detail="No video submissions found for this group"
@@ -263,16 +304,20 @@ async def generate_compilation(
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     
+    print(f"DEBUG: Checking for existing compilation for group {group_id}, week {week_start.date()} to {week_end.date()}")
+    
     existing_compilation = db.query(WeeklyCompilation).filter(
         WeeklyCompilation.group_id == group_id,
         WeeklyCompilation.week_start == week_start.date()
     ).first()
     
     if existing_compilation:
-        raise HTTPException(
-            status_code=400,
-            detail="Compilation already exists for this week"
-        )
+        print(f"DEBUG: Existing compilation found: {existing_compilation.id}, status: {existing_compilation.status}")
+        
+        # For testing purposes, allow re-compilation by deleting the existing one
+        print(f"DEBUG: Deleting existing compilation {existing_compilation.id} to allow re-compilation")
+        db.delete(existing_compilation)
+        db.commit()
     
     try:
         # Create a pending compilation record
@@ -388,6 +433,7 @@ async def get_compilation_status(
             print(f"Error generating download URL: {e}")
     
     return response_data
+
 
 @router.post("/test-compilation/{group_id}")
 async def test_compilation(
