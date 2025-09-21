@@ -143,14 +143,17 @@ export default function HomeScreen() {
               <View style={styles.invitesInfo}>
                 <IconSymbol name="envelope" size={20} color="#007AFF" />
                 <ThemedText style={styles.invitesText}>
-                  {pendingInvites.length} pending invite{pendingInvites.length > 1 ? 's' : ''}
+                  {pendingInvites.length} pending invite
+                  {pendingInvites.length > 1 ? "s" : ""}
                 </ThemedText>
               </View>
               <TouchableOpacity
                 style={styles.viewInvitesButton}
                 onPress={() => setShowInvitesModal(true)}
               >
-                <ThemedText style={styles.viewInvitesButtonText}>View Invites</ThemedText>
+                <ThemedText style={styles.viewInvitesButtonText}>
+                  View Invites
+                </ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -229,7 +232,7 @@ export default function HomeScreen() {
             onBack={() => setSelectedGroup(null)}
             onRecord={(groupId) => {
               setSelectedGroup(null);
-              router.push("/tabs/record");
+              router.push(`/tabs/record?groupId=${groupId}`);
             }}
             onWatchVideos={(group) => {
               setSelectedGroup(null);

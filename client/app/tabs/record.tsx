@@ -12,6 +12,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useState, useEffect, useRef } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
 import * as MediaLibrary from "expo-media-library";
 import { Audio, Video, ResizeMode } from "expo-av";
@@ -27,6 +28,9 @@ import { useGroups } from "../../contexts/GroupsContext";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function RecordScreen() {
+  // Get URL parameters
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
+
   // Context hooks
   const {
     groups,
@@ -93,12 +97,22 @@ export default function RecordScreen() {
     };
   }, []);
 
-  // Set first group as selected when groups load
+  // Set group as selected when groups load or groupId parameter changes
   useEffect(() => {
     if (groups.length > 0 && !selectedGroupId) {
+      // If groupId parameter is provided, try to find that group
+      if (groupId) {
+        const parsedGroupId = parseInt(groupId);
+        const targetGroup = groups.find((group) => group.id === parsedGroupId);
+        if (targetGroup) {
+          setSelectedGroupId(parsedGroupId);
+          return;
+        }
+      }
+      // Otherwise, set first group as selected
       setSelectedGroupId(groups[0].id);
     }
-  }, [groups, selectedGroupId]);
+  }, [groups, selectedGroupId, groupId]);
 
   // Refresh groups when authentication state changes
   useEffect(() => {
