@@ -5,6 +5,7 @@ import {
 } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -14,16 +15,23 @@ import { GroupsProvider } from "../contexts/GroupsContext";
 import { AuthGuard } from "../components/AuthGuard";
 
 export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <RootLayoutInner />
+    </SafeAreaProvider>
+  );
+}
+
+function RootLayoutInner() {
   const colorScheme = useColorScheme();
 
   return (
     <AuthProvider>
       <GroupsProvider>
         <ProfileProvider>
-          <ThemeProvider
-            value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-          >
-            <Stack initialRouteName="index">
+          <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: "#000" }} edges={["top"]}>
+              <Stack initialRouteName="index">
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen
                 name="auth"
@@ -46,8 +54,9 @@ export default function RootLayout() {
                 name="modal"
                 options={{ presentation: "modal", title: "Modal" }}
               />
-            </Stack>
-            <StatusBar style="auto" />
+              </Stack>
+              <StatusBar style="light" backgroundColor="#000" translucent={false} />
+            </SafeAreaView>
           </ThemeProvider>
         </ProfileProvider>
       </GroupsProvider>

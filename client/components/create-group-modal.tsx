@@ -8,10 +8,12 @@ import {
   Alert,
   Modal,
   FlatList,
+  Platform,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface CreateGroupModalProps {
   visible: boolean;
@@ -46,6 +48,8 @@ export function CreateGroupModal({
   const [groupName, setGroupName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [deadline, setDeadline] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [showUserSearch, setShowUserSearch] = useState(false);
@@ -64,7 +68,7 @@ export function CreateGroupModal({
     onCreateGroup({
       name: groupName.trim(),
       prompt: prompt.trim(),
-      deadline: deadline.trim(),
+      deadline: deadlineDate ? deadlineDate.toISOString() : deadline.trim(),
       members: ['You', ...selectedMembers],
     });
 
@@ -72,6 +76,8 @@ export function CreateGroupModal({
     setGroupName('');
     setPrompt('');
     setDeadline('');
+    setDeadlineDate(null);
+    setShowDatePicker(false);
     setSearchQuery('');
     setSelectedMembers([]);
     setShowUserSearch(false);
@@ -83,6 +89,8 @@ export function CreateGroupModal({
     setGroupName('');
     setPrompt('');
     setDeadline('');
+    setDeadlineDate(null);
+    setShowDatePicker(false);
     setSearchQuery('');
     setSelectedMembers([]);
     setShowUserSearch(false);
@@ -179,14 +187,31 @@ export function CreateGroupModal({
             {/* Deadline */}
             <View style={styles.section}>
               <ThemedText style={styles.sectionTitle}>Deadline</ThemedText>
-              <TextInput
+              <TouchableOpacity
                 style={styles.textInput}
-                value={deadline}
-                onChangeText={setDeadline}
-                placeholder="e.g., 2 hours, 1 day, Tomorrow at 6 PM"
-                placeholderTextColor="#666"
-                maxLength={50}
-              />
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.7}
+              >
+                <ThemedText>
+                  {deadlineDate
+                    ? `${deadlineDate.toLocaleDateString()} ${deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : 'Select date and time'}
+                </ThemedText>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={deadlineDate || new Date()}
+                  mode="datetime"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(event, selectedDate) => {
+                    if (Platform.OS !== 'ios') setShowDatePicker(false);
+                    if (selectedDate) {
+                      setDeadlineDate(selectedDate);
+                      setDeadline(selectedDate.toISOString());
+                    }
+                  }}
+                />
+              )}
             </View>
 
             {/* Invite Members */}
@@ -239,7 +264,9 @@ export function CreateGroupModal({
                       {groupName || 'Group Name'}
                     </ThemedText>
                     <ThemedText style={styles.previewTime}>
-                      {deadline || 'Deadline'}
+                      {deadlineDate
+                        ? `${deadlineDate.toLocaleDateString()} ${deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : 'Deadline'}
                     </ThemedText>
                   </View>
                   <ThemedText style={styles.previewPrompt}>

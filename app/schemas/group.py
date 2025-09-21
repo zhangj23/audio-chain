@@ -5,6 +5,7 @@ from typing import List, Optional
 class GroupBase(BaseModel):
     name: str
     description: Optional[str] = None
+    deadline_at: Optional[datetime] = None
 
 class GroupCreate(GroupBase):
     invited_usernames: Optional[List[str]] = []  # List of usernames to invite

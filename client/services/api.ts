@@ -14,6 +14,7 @@ export interface Group {
   id: number;
   name: string;
   description?: string;
+  deadline_at?: string;
   owner_id: number;
   created_at: string;
   members: GroupMember[];
@@ -252,10 +253,15 @@ class ApiService {
     return this.request<Group[]>(API_CONFIG.ENDPOINTS.GROUPS.LIST);
   }
 
-  async createGroup(name: string, description?: string): Promise<Group> {
+  async createGroup(
+    name: string,
+    description?: string,
+    deadline_at?: string
+  ): Promise<Group> {
     console.log("API Service - createGroup called with:", {
       name,
       description,
+      deadline_at,
     });
     console.log(
       "API Service - Making request to:",
@@ -269,7 +275,7 @@ class ApiService {
         API_CONFIG.ENDPOINTS.GROUPS.CREATE,
         {
           method: "POST",
-          body: JSON.stringify({ name, description }),
+          body: JSON.stringify({ name, description, deadline_at }),
         }
       );
 

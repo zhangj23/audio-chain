@@ -1,4 +1,5 @@
 import { Tabs } from "expo-router";
+import { } from "react-native-safe-area-context";
 import React from "react";
 
 import { HapticTab } from "@/components/haptic-tab";
@@ -11,13 +12,13 @@ export default function TabLayout() {
   // const colorScheme = useColorScheme();
 
   return (
-    <Tabs
+      <Tabs
       screenOptions={{
         tabBarActiveTintColor: "#fff",
         tabBarInactiveTintColor: "#666",
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarStyle: {
+          tabBarStyle: {
           backgroundColor: "#000",
           borderTopWidth: 1,
           borderTopColor: "#1a1a1a",
@@ -29,6 +30,7 @@ export default function TabLayout() {
           fontWeight: "500",
           marginTop: 4,
         },
+          // Safe area handled at root
       }}
     >
       <Tabs.Screen
@@ -58,6 +60,6 @@ export default function TabLayout() {
           ),
         }}
       />
-    </Tabs>
+      </Tabs>
   );
 }

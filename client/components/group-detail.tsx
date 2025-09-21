@@ -382,8 +382,8 @@ export function GroupDetail({
               </ThemedText>
               <View style={styles.berealDot} />
               <ThemedText style={styles.berealDueDate}>
-                {group.current_prompt?.week_end
-                  ? new Date(group.current_prompt.week_end).toLocaleDateString()
+                {group.deadline_at
+                  ? new Date(group.deadline_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })
                   : "No deadline"}
               </ThemedText>
             </View>
@@ -468,10 +468,8 @@ export function GroupDetail({
                     ? "Ready to View"
                     : group.isRevealed
                     ? "Complete"
-                    : group.current_prompt?.week_end
-                    ? new Date(
-                        group.current_prompt.week_end
-                      ).toLocaleDateString()
+                    : group.deadline_at
+                    ? new Date(group.deadline_at).toLocaleString([], { hour: '2-digit', minute: '2-digit' })
                     : "No deadline"}
                 </ThemedText>
               </View>
@@ -713,7 +711,11 @@ export function GroupDetail({
 
                     <View style={styles.memberDetails}>
                       <ThemedText style={styles.memberNameCard}>
-                        {isYou ? "You" : member}
+                        {isYou
+                          ? "You"
+                          : typeof member === "string"
+                          ? member
+                          : member.user?.username || "Unknown"}
                       </ThemedText>
                       <ThemedText style={styles.memberStatus}>
                         {actuallyHasSubmitted

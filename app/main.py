@@ -11,6 +11,24 @@ from app.models import user, group, video, prompt
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Minimal column migration for new fields (idempotent)
+def ensure_db_columns():
+    try:
+        with engine.connect() as conn:
+            dialect = engine.dialect.name
+            if dialect == "postgresql":
+                conn.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS deadline_at TIMESTAMPTZ")
+            elif dialect == "sqlite":
+                # SQLite has no IF NOT EXISTS for columns; attempt and ignore errors
+                try:
+                    conn.execute("ALTER TABLE groups ADD COLUMN deadline_at DATETIME")
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+ensure_db_columns()
+
 app = FastAPI(
     title="Weave API",
     description="Social app for creating weekly video compilations from friend groups",

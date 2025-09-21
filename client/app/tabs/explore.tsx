@@ -121,14 +121,13 @@ export default function ProfileScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
 
-  // Use profile context
+  // Use profile context + backend auth user
   const { profileImage, setProfileImage, userName, setUserName } = useProfile();
+  const { user } = useAuth();
 
-  // Use auth context for logout
-  const { logout } = useAuth();
 
   // Profile editing state
-  const [editedName, setEditedName] = useState(userName);
+  const [editedName, setEditedName] = useState(user?.username || userName);
   const [editedBio, setEditedBio] = useState(userData.bio);
 
   // Router for navigation
@@ -332,26 +331,7 @@ export default function ProfileScreen() {
     router.push("/settings");
   };
 
-  const handleLogout = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await logout();
-          } catch (error) {
-            console.error("Logout failed:", error);
-            Alert.alert("Error", "Failed to sign out. Please try again.");
-          }
-        },
-      },
-    ]);
-  };
+  // Removed logout from profile page per request
 
   const renderStats = () => (
     <View style={styles.statsContainer}>
@@ -646,22 +626,7 @@ export default function ProfileScreen() {
         {/* Achievements */}
         <View style={styles.section}>{renderAchievements()}</View>
 
-        {/* Account Actions */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Account</ThemedText>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            activeOpacity={0.7}
-          >
-            <View style={styles.logoutButtonContent}>
-              <View style={styles.logoutIconContainer}>
-                <IconSymbol name="power" size={18} color="#fff" />
-              </View>
-              <ThemedText style={styles.logoutButtonText}>Sign Out</ThemedText>
-            </View>
-          </TouchableOpacity>
-        </View>
+        {/* Account Actions removed */}
       </ScrollView>
     </ThemedView>
   );
