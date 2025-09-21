@@ -65,6 +65,10 @@ export default function RecordScreen() {
   const [flash, setFlash] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [recordedVideoUri, setRecordedVideoUri] = useState<string | null>(null);
+
+  // Animation for the enlarging red circle
+  const circleScaleAnim = useRef(new Animated.Value(1)).current;
+  const circleOpacityAnim = useRef(new Animated.Value(0)).current;
   const [showVideoPreview, setShowVideoPreview] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -179,6 +183,16 @@ export default function RecordScreen() {
           duration: MAX_RECORDING_TIME * 1000,
           useNativeDriver: false,
         }),
+        // Start circle animation - enlarge and fade in
+        Animated.spring(circleScaleAnim, {
+          toValue: 2.5,
+          useNativeDriver: true,
+        }),
+        Animated.timing(circleOpacityAnim, {
+          toValue: 0.3,
+          duration: 200,
+          useNativeDriver: true,
+        }),
       ]).start();
 
       // Start video recording
@@ -236,6 +250,16 @@ export default function RecordScreen() {
         toValue: 0,
         duration: 200,
         useNativeDriver: false,
+      }),
+      // Reset circle animation
+      Animated.spring(circleScaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(circleOpacityAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
       }),
     ]).start();
 
@@ -323,8 +347,44 @@ export default function RecordScreen() {
   };
 
   const submitVideo = async () => {
-    if (recordedVideoUri) {
-      // Store the video for this group using shared storage
+    if (!recordedVideoUri) return;
+
+    try {
+      // Show loading state
+      Alert.alert("Uploading...", "Please wait while your video is uploaded.");
+
+      // Create FormData for the video file
+      const formData = new FormData();
+      
+      // For React Native, we need to create a file object from the URI
+      const videoFile = {
+        uri: recordedVideoUri,
+        type: 'video/mp4',
+        name: `video_${Date.now()}.mp4`,
+      } as any;
+      
+      formData.append('video', videoFile);
+      formData.append('group_id', selectedGroupId);
+      formData.append('duration', recordingTime.toString());
+
+      // Upload to backend
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://129.161.69.14:8000'}/videos/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          // Add auth token if available
+          ...(await getAuthHeaders()),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Also store locally for offline access
       videoStorage.addVideo(selectedGroupId, {
         uri: recordedVideoUri,
         duration: recordingTime,
@@ -336,6 +396,12 @@ export default function RecordScreen() {
         `Your video was posted to ${selectedGroup.name}!`
       );
       closeVideoPreview();
+    } catch (error) {
+      console.error("Video upload failed:", error);
+      Alert.alert(
+        "Upload Failed",
+        "Failed to upload your video. Please try again."
+      );
     }
   };
 
@@ -474,6 +540,17 @@ export default function RecordScreen() {
                     { transform: [{ scale: scaleAnim }] },
                   ]}
                 >
+                  {/* Enlarging Red Circle - appears when recording */}
+                  <Animated.View
+                    style={[
+                      styles.recordingCircle,
+                      {
+                        transform: [{ scale: circleScaleAnim }],
+                        opacity: circleOpacityAnim,
+                      },
+                    ]}
+                  />
+
                   {/* Progress Ring Background */}
                   <View style={styles.progressTrack} />
 
@@ -1113,6 +1190,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+  },
+  recordingCircle: {
+    position: "absolute",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#ff4444",
+    opacity: 0,
   },
   progressTrack: {
     position: "absolute",
