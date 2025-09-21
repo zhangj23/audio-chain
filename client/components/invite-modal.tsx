@@ -13,6 +13,7 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { apiService } from '@/services/api';
 
 interface InviteModalProps {
   visible: boolean;
@@ -23,19 +24,13 @@ interface InviteModalProps {
   invitedUsers?: string[];
 }
 
-// Mock users for search functionality
-const mockUsers = [
-  { id: '1', username: 'alice_wonder', displayName: 'Alice Wonder', avatar: '👩‍💻' },
-  { id: '2', username: 'mike_codes', displayName: 'Mike Codes', avatar: '👨‍💻' },
-  { id: '3', username: 'sara_design', displayName: 'Sara Design', avatar: '👩‍🎨' },
-  { id: '4', username: 'john_dev', displayName: 'John Dev', avatar: '👨‍🔬' },
-  { id: '5', username: 'emma_creative', displayName: 'Emma Creative', avatar: '👩‍🎭' },
-  { id: '6', username: 'david_tech', displayName: 'David Tech', avatar: '👨‍🚀' },
-  { id: '7', username: 'lisa_art', displayName: 'Lisa Art', avatar: '👩‍🎨' },
-  { id: '8', username: 'tom_music', displayName: 'Tom Music', avatar: '👨‍🎵' },
-  { id: '9', username: 'anna_photo', displayName: 'Anna Photo', avatar: '👩‍📸' },
-  { id: '10', username: 'chris_video', displayName: 'Chris Video', avatar: '👨‍🎬' },
-];
+// User type for API data
+interface User {
+  id: number;
+  username: string;
+  email: string;
+  created_at: string;
+}
 
 export function InviteModal({
   visible,
@@ -48,14 +43,47 @@ export function InviteModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [showExistingMembers, setShowExistingMembers] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch users from API when modal opens
+  useEffect(() => {
+    if (visible) {
+      fetchUsers();
+    }
+  }, [visible]);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const fetchedUsers = await apiService.getUsers();
+      setUsers(fetchedUsers);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+      setError('Failed to load users. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter users based on search query, existing members, and invited users
-  const filteredUsers = mockUsers.filter(user => {
-    const matchesSearch = user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchQuery.toLowerCase());
-    const isExisting = existingMembers.includes(user.id);
-    const isInvited = invitedUsers.includes(user.id);
+  const filteredUsers = users.filter(user => {
+    const matchesSearch = user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const isExisting = existingMembers.includes(user.id.toString());
+    const isInvited = invitedUsers.includes(user.id.toString());
     const isAlreadyInvolved = isExisting || isInvited;
+    
+    // Debug logging
+    console.log(`User ${user.username} (ID: ${user.id}):`, {
+      isExisting,
+      isInvited,
+      isAlreadyInvolved,
+      invitedUsers,
+      showExistingMembers
+    });
     
     // If showExistingMembers is true, show all users (including existing and invited)
     // If showExistingMembers is false, only show users who are neither existing nor invited
@@ -63,12 +91,12 @@ export function InviteModal({
   });
 
   // Count existing members and invited users for display
-  const hiddenCount = mockUsers.filter(user => {
-    const isExisting = existingMembers.includes(user.id);
-    const isInvited = invitedUsers.includes(user.id);
+  const hiddenCount = users.filter(user => {
+    const isExisting = existingMembers.includes(user.id.toString());
+    const isInvited = invitedUsers.includes(user.id.toString());
     const isAlreadyInvolved = isExisting || isInvited;
-    const matchesSearch = user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         user.email.toLowerCase().includes(searchQuery.toLowerCase());
     
     return isAlreadyInvolved && matchesSearch;
   }).length;
@@ -99,10 +127,10 @@ export function InviteModal({
     onClose();
   };
 
-  const renderUserItem = ({ item }: { item: typeof mockUsers[0] }) => {
-    const isSelected = selectedMembers.includes(item.id);
-    const isExisting = existingMembers.includes(item.id);
-    const isInvited = invitedUsers.includes(item.id);
+  const renderUserItem = ({ item }: { item: User }) => {
+    const isSelected = selectedMembers.includes(item.id.toString());
+    const isExisting = existingMembers.includes(item.id.toString());
+    const isInvited = invitedUsers.includes(item.id.toString());
     const isAlreadyInvolved = isExisting || isInvited;
 
     return (
@@ -112,19 +140,21 @@ export function InviteModal({
           isSelected && styles.userItemSelected,
           isAlreadyInvolved && styles.userItemExisting,
         ]}
-        onPress={() => !isAlreadyInvolved && handleUserSelect(item.id)}
+        onPress={() => !isAlreadyInvolved && handleUserSelect(item.id.toString())}
         disabled={isAlreadyInvolved}
       >
         <View style={styles.userInfo}>
           <View style={styles.userAvatar}>
-            <ThemedText style={styles.avatarText}>{item.avatar}</ThemedText>
+            <ThemedText style={styles.avatarText}>
+              {item.username.charAt(0).toUpperCase()}
+            </ThemedText>
           </View>
           <View style={styles.userDetails}>
             <ThemedText style={styles.userDisplayName}>
-              {item.displayName}
+              {item.username}
             </ThemedText>
             <ThemedText style={styles.userUsername}>
-              @{item.username}
+              {item.email}
             </ThemedText>
           </View>
         </View>
@@ -219,7 +249,24 @@ export function InviteModal({
         </View>
 
         {/* Users List */}
-        {filteredUsers.length === 0 ? (
+        {loading ? (
+          <View style={styles.emptyContainer}>
+            <IconSymbol name="clock" size={48} color="#8E8E93" />
+            <ThemedText style={styles.emptyTitle}>Loading users...</ThemedText>
+          </View>
+        ) : error ? (
+          <View style={styles.emptyContainer}>
+            <IconSymbol name="exclamationmark.triangle" size={48} color="#FF3B30" />
+            <ThemedText style={styles.emptyTitle}>Error</ThemedText>
+            <ThemedText style={styles.emptySubtitle}>{error}</ThemedText>
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={fetchUsers}
+            >
+              <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+            </TouchableOpacity>
+          </View>
+        ) : filteredUsers.length === 0 ? (
           <View style={styles.emptyContainer}>
             <IconSymbol name="person.2.slash" size={48} color="#8E8E93" />
             <ThemedText style={styles.emptyTitle}>No one to add</ThemedText>
@@ -234,7 +281,7 @@ export function InviteModal({
           <FlatList
             data={filteredUsers}
             renderItem={renderUserItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item.id.toString()}
             style={styles.usersList}
             showsVerticalScrollIndicator={false}
           />
@@ -422,5 +469,17 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     textAlign: 'center',
     lineHeight: 22,
+  },
+  retryButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 16,
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

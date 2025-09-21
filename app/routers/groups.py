@@ -16,7 +16,9 @@ from app.schemas.group import (
     GroupWithMembers, 
     GroupMemberResponse,
     GroupPendingRequestResponse,
-    GroupCreateResponse
+    GroupCreateResponse,
+    GroupInvite,
+    GroupInviteResponse
 )
 from app.auth import get_current_user
 
@@ -213,6 +215,48 @@ async def get_my_groups(
     
     return result
 
+@router.get("/pending-invites", response_model=List[GroupPendingRequestResponse])
+async def get_pending_invites(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all pending invites for the current user"""
+    pending_requests = db.query(GroupPendingRequest).filter(
+        GroupPendingRequest.invited_username == current_user.username,
+        GroupPendingRequest.status == "pending",
+        GroupPendingRequest.expires_at > datetime.utcnow()  # Not expired
+    ).all()
+    
+    return [
+        GroupPendingRequestResponse(
+            id=pr.id,
+            group_id=pr.group_id,
+            invited_username=pr.invited_username,
+            invited_by=pr.invited_by,
+            status=pr.status,
+            created_at=pr.created_at,
+            expires_at=pr.expires_at
+        ) for pr in pending_requests]
+
+@router.get("/users", response_model=List[dict])
+async def get_users_for_invite(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get list of users that can be invited to groups"""
+    # Get all users except the current user
+    users = db.query(User).filter(User.id != current_user.id).all()
+    
+    return [
+        {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "created_at": user.created_at.isoformat() if user.created_at else None
+        }
+        for user in users
+    ]
+
 @router.get("/{group_id}", response_model=GroupWithMembers)
 async def get_group(
     group_id: int,
@@ -270,28 +314,6 @@ async def get_group(
         ) for pr in pending_requests]
     )
 
-@router.get("/pending-invites", response_model=List[GroupPendingRequestResponse])
-async def get_pending_invites(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get all pending invites for the current user"""
-    pending_requests = db.query(GroupPendingRequest).filter(
-        GroupPendingRequest.invited_username == current_user.username,
-        GroupPendingRequest.status == "pending",
-        GroupPendingRequest.expires_at > datetime.utcnow()  # Not expired
-    ).all()
-    
-    return [GroupPendingRequestResponse(
-        id=pr.id,
-        group_id=pr.group_id,
-        invited_username=pr.invited_username,
-        invited_by=pr.invited_by,
-        status=pr.status,
-        created_at=pr.created_at,
-        expires_at=pr.expires_at
-    ) for pr in pending_requests]
-
 @router.get("/{group_id}/video-stats")
 async def get_group_video_stats(
     group_id: int,
@@ -333,3 +355,105 @@ async def get_group_video_stats(
         "total_members": total_members,
         "submission_rate": round((unique_submitters / total_members) * 100, 1) if total_members > 0 else 0
     }
+
+@router.post("/{group_id}/invite", response_model=GroupInviteResponse)
+async def invite_users_to_group(
+    group_id: int,
+    invite_data: GroupInvite,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Invite users to an existing group"""
+    # Check if user is a member of the group
+    membership = db.query(GroupMember).filter(
+        GroupMember.user_id == current_user.id,
+        GroupMember.group_id == group_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a member of this group"
+        )
+    
+    # Get the group
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+    
+    successful_invites = []
+    failed_invites = []
+    pending_requests = []
+    
+    for username in invite_data.usernames:
+        # Check if user exists
+        invited_user = db.query(User).filter(User.username == username).first()
+        if not invited_user:
+            failed_invites.append(f"{username} (user not found)")
+            continue
+            
+        # Check if user is already a member
+        existing_member = db.query(GroupMember).filter(
+            GroupMember.user_id == invited_user.id,
+            GroupMember.group_id == group_id
+        ).first()
+        
+        if existing_member:
+            failed_invites.append(f"{username} (already a member)")
+            continue
+            
+        # Check if there's already a pending request
+        existing_request = db.query(GroupPendingRequest).filter(
+            GroupPendingRequest.group_id == group_id,
+            GroupPendingRequest.invited_username == username,
+            GroupPendingRequest.status == "pending"
+        ).first()
+        
+        if existing_request:
+            failed_invites.append(f"{username} (already invited)")
+            continue
+            
+        # Create pending request
+        pending_request = GroupPendingRequest(
+            group_id=group_id,
+            invited_username=username,
+            invited_by=current_user.id,
+            status="pending",
+            expires_at=datetime.utcnow() + timedelta(days=7)
+        )
+        db.add(pending_request)
+        pending_requests.append(pending_request)
+        successful_invites.append(username)
+    
+    db.commit()
+    
+    # Refresh pending requests to get IDs
+    for pr in pending_requests:
+        db.refresh(pr)
+    
+    # Prepare response
+    pending_request_responses = [
+        GroupPendingRequestResponse(
+            id=pr.id,
+            group_id=pr.group_id,
+            invited_username=pr.invited_username,
+            invited_by=pr.invited_by,
+            status=pr.status,
+            created_at=pr.created_at,
+            expires_at=pr.expires_at
+        ) for pr in pending_requests
+    ]
+    
+    message = f"Invitation process completed. {len(successful_invites)} invites sent"
+    if failed_invites:
+        message += f", {len(failed_invites)} failed"
+        
+    return GroupInviteResponse(
+        message=message,
+        successful_invites=successful_invites,
+        failed_invites=failed_invites,
+        pending_requests=pending_request_responses
+    )

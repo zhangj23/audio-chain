@@ -7,12 +7,12 @@ import {
   Modal,
   Alert,
 } from "react-native";
+import { useState, useRef, useEffect } from "react";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupSettings } from "@/components/group-settings";
 import { InviteModal } from "@/components/invite-modal";
-import { useState, useRef } from "react";
 import { Video } from "expo-av";
 import { apiService } from "@/services/api";
 
@@ -72,12 +72,17 @@ export function GroupDetail({
 }: GroupDetailProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [currentVideoUri, setCurrentVideoUri] = useState<string | null>(null);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isCreatingCollage, setIsCreatingCollage] = useState(false);
   const [compilationId, setCompilationId] = useState<number | null>(null); // For future compilation status tracking
   const videoRef = useRef<Video>(null);
+
+  // Note: For now, we only track invited users within the current session
+  // In a full implementation, you'd want to fetch existing pending invites
+  // when the component loads to show users who were already invited
 
   const openSettings = () => {
     setShowSettings(true);
@@ -112,14 +117,57 @@ export function GroupDetail({
     setShowInviteModal(true);
   };
 
-  const handleInvite = (userIds: string[]) => {
-    console.log("Inviting users to group:", group.id, userIds);
-    // TODO: Implement actual invite API call
-    Alert.alert(
-      "Invites Sent!",
-      `Successfully invited ${userIds.length} people to ${group.name}.`
-    );
-    setShowInviteModal(false);
+  const handleInvite = async (userIds: string[]) => {
+    try {
+      console.log("Inviting users to group:", group.id, userIds);
+      
+      // Fetch all users to get usernames for the selected user IDs
+      const allUsers = await apiService.getUsers();
+      
+      const usernames = userIds.map(id => {
+        const user = allUsers.find(u => u.id.toString() === id);
+        return user?.username || id;
+      });
+      
+      const response = await apiService.inviteUsers(group.id, usernames);
+      
+      // Update the invited users list with successfully invited users
+      if (response.successful_invites.length > 0) {
+        const successfulUserIds = userIds.filter((id, index) => {
+          const username = usernames[index];
+          return response.successful_invites.includes(username);
+        });
+        console.log("DEBUG: Adding to invitedUsers:", {
+          userIds,
+          usernames,
+          successful_invites: response.successful_invites,
+          successfulUserIds
+        });
+        setInvitedUsers(prev => {
+          const newList = [...prev, ...successfulUserIds];
+          console.log("DEBUG: Updated invitedUsers:", newList);
+          return newList;
+        });
+      }
+      
+      let alertMessage = response.message;
+      if (response.failed_invites.length > 0) {
+        alertMessage += `\n\nFailed invites: ${response.failed_invites.join(', ')}`;
+      }
+      
+      Alert.alert(
+        response.successful_invites.length > 0 ? "Invites Sent!" : "Invite Issues",
+        alertMessage
+      );
+      
+      setShowInviteModal(false);
+    } catch (error) {
+      console.error("Failed to send invites:", error);
+      Alert.alert(
+        "Error",
+        "Failed to send invites. Please try again."
+      );
+    }
   };
 
   const openVideoPlayer = (videoUri: string) => {
@@ -840,7 +888,7 @@ export function GroupDetail({
         existingMembers={group.members?.map(member => 
           typeof member === 'string' ? member : member.user_id?.toString() || ''
         ) || []}
-        invitedUsers={['2', '5']} // Mock invited users for testing
+        invitedUsers={invitedUsers}
       />
     </ThemedView>
   );

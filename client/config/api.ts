@@ -21,6 +21,8 @@ export const API_CONFIG = {
       GET: (id: number) => `/groups/${id}`,
       JOIN: (id: number) => `/groups/join`,
       LEAVE: (id: number) => `/groups/${id}/leave`,
+      INVITE: (id: number) => `/groups/${id}/invite`,
+      USERS: "/groups/users",
     },
     VIDEOS: {
       SUBMISSIONS: (groupId: number) => `/videos/submissions/${groupId}`,

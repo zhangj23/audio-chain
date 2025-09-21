@@ -44,6 +44,15 @@ class GroupPendingRequestResponse(BaseModel):
 class GroupJoin(BaseModel):
     invite_code: str
 
+class GroupInvite(BaseModel):
+    usernames: List[str]  # List of usernames to invite
+
+class GroupInviteResponse(BaseModel):
+    message: str
+    successful_invites: List[str]
+    failed_invites: List[str]
+    pending_requests: List[GroupPendingRequestResponse]
+
 class GroupWithMembers(GroupResponse):
     members: List[GroupMemberResponse] = []
     pending_requests: List[GroupPendingRequestResponse] = []

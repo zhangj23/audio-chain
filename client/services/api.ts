@@ -303,6 +303,35 @@ class ApiService {
     );
   }
 
+  async inviteUsers(groupId: number, usernames: string[]): Promise<{
+    message: string;
+    successful_invites: string[];
+    failed_invites: string[];
+  }> {
+    return this.request<{
+      message: string;
+      successful_invites: string[];
+      failed_invites: string[];
+    }>(API_CONFIG.ENDPOINTS.GROUPS.INVITE(groupId), {
+      method: "POST",
+      body: JSON.stringify({ usernames }),
+    });
+  }
+
+  async getUsers(): Promise<{
+    id: number;
+    username: string;
+    email: string;
+    created_at: string;
+  }[]> {
+    return this.request<{
+      id: number;
+      username: string;
+      email: string;
+      created_at: string;
+    }[]>(API_CONFIG.ENDPOINTS.GROUPS.USERS);
+  }
+
   // Video methods
   async getVideoSubmissions(groupId: number): Promise<VideoSubmission[]> {
     return this.request<VideoSubmission[]>(
