@@ -18,7 +18,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
       if (isAuthenticated && user) {
         // Add a small delay to ensure all contexts are properly initialized
         setTimeout(() => {
-          router.replace("/(tabs)");
+          router.replace("/tabs");
         }, 500);
       } else {
         router.replace("/auth");

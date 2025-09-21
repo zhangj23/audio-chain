@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useState,
   ReactNode,
+  useCallback,
 } from "react";
 import {
   apiService,
@@ -43,11 +44,18 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshGroups = async () => {
+  const refreshGroups = useCallback(async () => {
+    console.log("GroupsContext: refreshGroups called");
     try {
       setError(null);
       setIsLoading(true);
+      console.log("GroupsContext: Calling apiService.getGroups()");
       const groupsData = await apiService.getGroups();
+      console.log(
+        "GroupsContext: Got groups data:",
+        groupsData.length,
+        "groups"
+      );
       setGroups(groupsData);
     } catch (error) {
       const errorMessage =
@@ -57,18 +65,24 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   const createGroup = async (
     name: string,
     description?: string
   ): Promise<Group> => {
     try {
+      console.log("GroupsContext - createGroup called with:", {
+        name,
+        description,
+      });
       setError(null);
       const newGroup = await apiService.createGroup(name, description);
       setGroups((prev) => [newGroup, ...prev]);
+      console.log("GroupsContext - Groups updated with new group:", newGroup);
       return newGroup;
     } catch (error) {
+      console.error("GroupsContext - createGroup error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Failed to create group";
       setError(errorMessage);
@@ -166,6 +180,11 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
 
   // Load groups when authentication state changes
   useEffect(() => {
+    console.log("GroupsContext useEffect triggered:", {
+      isAuthenticated,
+      user: user?.id,
+      isLoading,
+    });
     if (isAuthenticated && user) {
       console.log("GroupsContext: User authenticated, loading groups");
       refreshGroups();
@@ -175,7 +194,7 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
       setError(null);
       setIsLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, refreshGroups]);
 
   const value: GroupsContextType = {
     groups,

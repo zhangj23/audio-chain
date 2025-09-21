@@ -33,13 +33,13 @@ export default function RootLayout() {
                 name="signup"
                 options={{ title: "Sign up", headerShown: false }}
               />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="tabs" options={{ headerShown: false }} />
               <Stack.Screen
                 name="settings"
-                options={{ 
-                  title: "Settings", 
+                options={{
+                  title: "Settings",
                   headerShown: false,
-                  presentation: "card"
+                  presentation: "card",
                 }}
               />
               <Stack.Screen

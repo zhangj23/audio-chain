@@ -1,11 +1,10 @@
+import React, { useState } from "react";
 import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
-  Alert,
   Modal,
-  Dimensions,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
@@ -15,63 +14,40 @@ import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupDetail } from "@/components/group-detail";
 import { CreateGroupModal } from "@/components/create-group-modal";
-import { useState, useEffect } from "react";
-import { videoStorage } from "../../utils/videoStorage";
 import { useGroups } from "@/contexts/GroupsContext";
 import { useAuth } from "@/contexts/AuthContext";
 
-const { width, height } = Dimensions.get("window");
-
-// Mock notifications data
-const mockNotifications = [
-  {
-    id: 1,
-    type: "submission_reminder",
-    groupName: "College Friends 🎓",
-    message: "Don't forget to submit your photo! 2h left",
-    time: "5 min ago",
-    urgent: true,
-  },
-  {
-    id: 2,
-    type: "submission_reminder",
-    groupName: "Work Squad 💼",
-    message: "Your friends are waiting for your photo",
-    time: "1h ago",
-    urgent: false,
-  },
-  {
-    id: 3,
-    type: "group_complete",
-    groupName: "Family Fun 👨‍👩‍👧‍👦",
-    message: "All photos submitted! Ready to view",
-    time: "3h ago",
-    urgent: false,
-  },
-  {
-    id: 4,
-    type: "submission_reminder",
-    groupName: "Fitness Crew 💪",
-    message: "Time to show your workout!",
-    time: "1d ago",
-    urgent: false,
-  },
-];
-
 export default function HomeScreen() {
   const router = useRouter();
-  const { groups, isLoading, error, refreshGroups } = useGroups();
+  const { groups, isLoading, error, refreshGroups, createGroup } = useGroups();
   const { user } = useAuth();
-  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [submittedVideos] = useState<{
+    [groupId: string]: any;
+  }>({});
 
   const onRefresh = async () => {
     setRefreshing(true);
+    await refreshGroups();
+    setRefreshing(false);
+  };
+
+  const handleCreateGroup = async (groupData: {
+    name: string;
+    prompt: string;
+    deadline: string;
+    members: string[];
+  }) => {
     try {
-      await refreshGroups();
-    } finally {
-      setRefreshing(false);
+      console.log("HomeScreen - Creating group with data:", groupData);
+      const newGroup = await createGroup(groupData.name, groupData.prompt);
+      console.log("HomeScreen - Group created successfully:", newGroup);
+      setShowCreateModal(false);
+    } catch (error) {
+      console.error("HomeScreen - Error creating group:", error);
+      // Error handling is done in the context
     }
   };
 
@@ -79,78 +55,10 @@ export default function HomeScreen() {
     setSelectedGroup(group);
   };
 
-  const handleCreateGroup = () => {
-    setShowCreateModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowCreateModal(false);
-  };
-
-  const handleGroupCreated = () => {
-    setShowCreateModal(false);
-    refreshGroups();
-  };
-
-  const renderNotification = (notification: any) => (
-    <View
-      key={notification.id}
-      style={[
-        styles.notificationItem,
-        notification.urgent && styles.urgentNotification,
-      ]}
-    >
-      <View style={styles.notificationContent}>
-        <ThemedText style={styles.notificationMessage}>
-          {notification.message}
-        </ThemedText>
-        <ThemedText style={styles.notificationTime}>
-          {notification.time}
-        </ThemedText>
-      </View>
-      {notification.urgent && (
-        <View style={styles.urgentBadge}>
-          <ThemedText style={styles.urgentText}>!</ThemedText>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderGroupCard = (group: any) => (
-    <TouchableOpacity
-      key={group.id}
-      style={styles.groupCard}
-      onPress={() => handleGroupPress(group)}
-    >
-      <View style={styles.groupHeader}>
-        <ThemedText style={styles.groupName}>{group.name}</ThemedText>
-        <View style={styles.groupStatus}>
-          <ThemedText style={styles.memberCount}>
-            {group.memberCount} members
-          </ThemedText>
-          <ThemedText style={styles.dueDate}>{group.dueDate}</ThemedText>
-        </View>
-      </View>
-
-      <ThemedText style={styles.groupPrompt}>{group.current_prompt}</ThemedText>
-
-      <View style={styles.groupActions}>
-        <TouchableOpacity style={styles.actionButton}>
-          <IconSymbol name="camera" size={16} color="#2563eb" />
-          <ThemedText style={styles.actionText}>Record</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <IconSymbol name="play" size={16} color="#10b981" />
-          <ThemedText style={styles.actionText}>View</ThemedText>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-
   if (isLoading) {
     return (
       <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color="#007AFF" />
         <ThemedText style={styles.loadingText}>Loading groups...</ThemedText>
       </ThemedView>
     );
@@ -177,68 +85,61 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <ThemedText type="title" style={styles.welcomeText}>
-              Welcome back!
-            </ThemedText>
-            <ThemedText style={styles.subtitle}>
-              Ready to create some memories?
-            </ThemedText>
-          </View>
+          <ThemedText style={styles.title}>Your Groups</ThemedText>
           <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => router.push("/(tabs)/explore")}
+            style={styles.addButton}
+            onPress={() => setShowCreateModal(true)}
           >
-            <IconSymbol name="person.circle" size={32} color="#2563eb" />
+            <IconSymbol name="plus" size={24} color="#007AFF" />
           </TouchableOpacity>
         </View>
 
-        {/* Notifications */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>Notifications</ThemedText>
-            <TouchableOpacity>
-              <ThemedText style={styles.seeAllText}>See all</ThemedText>
-            </TouchableOpacity>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.notificationsScroll}
-          >
-            {mockNotifications.map(renderNotification)}
-          </ScrollView>
-        </View>
-
-        {/* Groups */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ThemedText style={styles.sectionTitle}>Your Groups</ThemedText>
-            <TouchableOpacity onPress={handleCreateGroup}>
-              <ThemedText style={styles.seeAllText}>+ Create</ThemedText>
-            </TouchableOpacity>
-          </View>
-
+        {/* Groups List */}
+        <View style={styles.groupsList}>
           {groups.length === 0 ? (
             <View style={styles.emptyState}>
-              <IconSymbol name="person.2" size={48} color="#9ca3af" />
+              <IconSymbol name="person.2" size={48} color="#8E8E93" />
               <ThemedText style={styles.emptyTitle}>No groups yet</ThemedText>
               <ThemedText style={styles.emptySubtitle}>
-                Create your first group or join one to get started!
+                Create your first group to start sharing videos with friends
               </ThemedText>
               <TouchableOpacity
-                style={styles.createButton}
-                onPress={handleCreateGroup}
+                style={styles.createFirstGroupButton}
+                onPress={() => setShowCreateModal(true)}
               >
-                <ThemedText style={styles.createButtonText}>
+                <ThemedText style={styles.createFirstGroupButtonText}>
                   Create Group
                 </ThemedText>
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.groupsContainer}>
-              {groups.map(renderGroupCard)}
-            </View>
+            groups.map((group) => (
+              <TouchableOpacity
+                key={group.id}
+                style={styles.groupCard}
+                onPress={() => handleGroupPress(group)}
+              >
+                <View style={styles.groupHeader}>
+                  <ThemedText style={styles.groupName}>{group.name}</ThemedText>
+                  <IconSymbol name="chevron.right" size={16} color="#8E8E93" />
+                </View>
+                <ThemedText style={styles.groupDescription}>
+                  {group.description || "No description"}
+                </ThemedText>
+                <View style={styles.groupStats}>
+                  <View style={styles.stat}>
+                    <IconSymbol name="person.2" size={14} color="#8E8E93" />
+                    <ThemedText style={styles.statText}>
+                      {(group.members || []).length} members
+                    </ThemedText>
+                  </View>
+                  <View style={styles.stat}>
+                    <IconSymbol name="video" size={14} color="#8E8E93" />
+                    <ThemedText style={styles.statText}>0 videos</ThemedText>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
           )}
         </View>
       </ScrollView>
@@ -252,7 +153,19 @@ export default function HomeScreen() {
         {selectedGroup && (
           <GroupDetail
             group={selectedGroup}
-            onClose={() => setSelectedGroup(null)}
+            onBack={() => setSelectedGroup(null)}
+            onRecord={(groupId) => {
+              setSelectedGroup(null);
+              router.push("/tabs/record");
+            }}
+            onWatchVideos={(group) => {
+              setSelectedGroup(null);
+              // TODO: Navigate to watch videos
+            }}
+            submittedVideo={
+              selectedGroup ? submittedVideos[selectedGroup.id] || null : null
+            }
+            currentUserId={user?.id}
           />
         )}
       </Modal>
@@ -260,8 +173,8 @@ export default function HomeScreen() {
       {/* Create Group Modal */}
       <CreateGroupModal
         visible={showCreateModal}
-        onClose={handleCloseModal}
-        onGroupCreated={handleGroupCreated}
+        onClose={() => setShowCreateModal(false)}
+        onCreateGroup={handleCreateGroup}
       />
     </ThemedView>
   );
@@ -270,207 +183,132 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#000",
+  },
+  scrollView: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 16,
+    backgroundColor: "#000",
   },
   loadingText: {
+    marginTop: 16,
     fontSize: 16,
-    opacity: 0.7,
+    color: "#8E8E93",
   },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    gap: 16,
-    padding: 24,
+    backgroundColor: "#000",
+    padding: 20,
   },
   errorText: {
     fontSize: 16,
-    color: "#dc2626",
+    color: "#FF3B30",
     textAlign: "center",
+    marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: "#2563eb",
+    backgroundColor: "#007AFF",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: "white",
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
-  },
-  scrollView: {
-    flex: 1,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 60,
+    paddingBottom: 20,
   },
-  welcomeText: {
-    fontSize: 28,
+  title: {
+    fontSize: 32,
     fontWeight: "bold",
+    color: "#fff",
   },
-  subtitle: {
-    fontSize: 16,
-    opacity: 0.7,
-    marginTop: 4,
-  },
-  profileButton: {
-    padding: 8,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  seeAllText: {
-    fontSize: 16,
-    color: "#2563eb",
-    fontWeight: "600",
-  },
-  notificationsScroll: {
-    paddingLeft: 20,
-  },
-  notificationItem: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 12,
-    padding: 16,
-    marginRight: 12,
-    width: width * 0.7,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  urgentNotification: {
-    borderColor: "#fbbf24",
-    backgroundColor: "#fef3c7",
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  notificationTime: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
-  urgentBadge: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "#f59e0b",
-    borderRadius: 10,
-    width: 20,
-    height: 20,
+  addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
   },
-  urgentText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  groupsContainer: {
+  groupsList: {
     paddingHorizontal: 20,
-    gap: 16,
-  },
-  groupCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  groupHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  groupName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    flex: 1,
-  },
-  groupStatus: {
-    alignItems: "flex-end",
-  },
-  memberCount: {
-    fontSize: 12,
-    opacity: 0.6,
-  },
-  dueDate: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#2563eb",
-  },
-  groupPrompt: {
-    fontSize: 14,
-    opacity: 0.8,
-    marginBottom: 16,
-    fontStyle: "italic",
-  },
-  groupActions: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "#f1f5f9",
-  },
-  actionText: {
-    fontSize: 14,
-    fontWeight: "500",
   },
   emptyState: {
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 40,
+    paddingVertical: 60,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#fff",
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 14,
-    opacity: 0.7,
+    fontSize: 16,
+    color: "#8E8E93",
     textAlign: "center",
     marginBottom: 24,
   },
-  createButton: {
-    backgroundColor: "#2563eb",
+  createFirstGroupButton: {
+    backgroundColor: "#007AFF",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
   },
-  createButtonText: {
-    color: "white",
+  createFirstGroupButtonText: {
+    color: "#fff",
+    fontSize: 16,
     fontWeight: "600",
+  },
+  groupCard: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  groupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  groupName: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#fff",
+    flex: 1,
+  },
+  groupDescription: {
+    fontSize: 14,
+    color: "#8E8E93",
+    marginBottom: 12,
+  },
+  groupStats: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  stat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  statText: {
+    fontSize: 12,
+    color: "#8E8E93",
   },
 });

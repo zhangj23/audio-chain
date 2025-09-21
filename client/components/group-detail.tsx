@@ -20,7 +20,7 @@ interface GroupDetailProps {
   group: {
     id: string;
     name: string;
-    members: string[];
+    members: any[]; // Can be string[] (mock) or GroupMember[] (real data)
     videosSubmitted: number;
     totalMembers: number;
     dueDate: string;
@@ -36,6 +36,7 @@ interface GroupDetailProps {
     duration: number;
     timestamp: number;
   } | null;
+  currentUserId?: number;
 }
 
 export function GroupDetail({
@@ -44,6 +45,7 @@ export function GroupDetail({
   onRecord,
   onWatchVideos,
   submittedVideo,
+  currentUserId,
 }: GroupDetailProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
@@ -95,7 +97,7 @@ export function GroupDetail({
   };
 
   const getGridDimensions = () => {
-    const memberCount = group.members.length;
+    const memberCount = group.members?.length || 0;
     const screenWidth = width - 40; // Account for padding
 
     // Always calculate tile width based on 3 columns for consistency in small groups
@@ -122,9 +124,12 @@ export function GroupDetail({
 
     return (
       <View style={styles.videoGrid}>
-        {group.members.map((member, index) => {
+        {(group.members || []).map((member, index) => {
           const hasSubmitted = index < group.videosSubmitted;
-          const isYou = member === "You";
+          const isYou =
+            typeof member === "string"
+              ? member === "You"
+              : currentUserId && member.user_id === currentUserId;
 
           // If weaved, no individual videos can be viewed
           const userHasSubmittedVideo = isYou && submittedVideo;
@@ -218,7 +223,11 @@ export function GroupDetail({
                 {/* Member name */}
                 <View style={styles.memberLabel}>
                   <ThemedText style={styles.memberName} numberOfLines={1}>
-                    {isYou ? "You" : member.split(" ")[0]}
+                    {isYou
+                      ? "You"
+                      : typeof member === "string"
+                      ? member.split(" ")[0]
+                      : member.user?.username || "Unknown"}
                   </ThemedText>
                   {actuallyHasSubmitted && <View style={styles.statusDot} />}
                 </View>
@@ -514,9 +523,12 @@ export function GroupDetail({
 
           {/* Member List with Enhanced Cards */}
           <View style={styles.memberList}>
-            {group.members.map((member, index) => {
+            {(group.members || []).map((member, index) => {
               const hasSubmitted = index < group.videosSubmitted;
-              const isYou = member === "You";
+              const isYou =
+                typeof member === "string"
+                  ? member === "You"
+                  : currentUserId && member.user_id === currentUserId;
               const userHasSubmittedVideo = isYou && submittedVideo;
               const actuallyHasSubmitted =
                 hasSubmitted || userHasSubmittedVideo;

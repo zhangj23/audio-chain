@@ -53,7 +53,7 @@ export default function SignupScreen() {
 
     try {
       await signup(email.trim(), username.trim(), password);
-      router.replace("/(tabs)");
+      router.replace("/tabs");
     } catch (error) {
       // Error is handled by the AuthContext and displayed via the error state
     }

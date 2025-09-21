@@ -23,7 +23,7 @@ router = APIRouter()
 
 def generate_invite_code(length: int = 8) -> str:
     """Generate a random invite code"""
-    return ''.join(secrets.choices(string.ascii_uppercase + string.digits, k=length))
+    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 @router.post("/create", response_model=GroupCreateResponse)
 async def create_group(

@@ -46,7 +46,7 @@ export default function AuthScreen() {
 
     try {
       await login(email.trim(), password);
-      router.replace("/(tabs)");
+      router.replace("/tabs");
     } catch (error) {
       // Error is handled by the AuthContext and displayed via the error state
     }
@@ -144,7 +144,7 @@ export default function AuthScreen() {
           </View>
 
           <View style={styles.footer}>
-            <ThemedText>Don't have an account? </ThemedText>
+            <ThemedText>Don&apos;t have an account? </ThemedText>
             <Link href="/signup">
               <ThemedText type="link">Sign up</ThemedText>
             </Link>

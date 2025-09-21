@@ -128,19 +128,55 @@ class ApiService {
       },
     };
 
+    console.log("API Service - Making request:", {
+      url,
+      method: config.method || "GET",
+      headers: config.headers,
+      body: config.body,
+    });
+
+    // Test basic connectivity first
+    try {
+      console.log("API Service - Testing connectivity to:", this.baseUrl);
+      const healthResponse = await fetch(`${this.baseUrl}/health`);
+      console.log(
+        "API Service - Health check response:",
+        healthResponse.status
+      );
+    } catch (healthError) {
+      console.error("API Service - Health check failed:", healthError);
+      throw new Error(
+        `Cannot connect to backend at ${this.baseUrl}. Please check if the server is running.`
+      );
+    }
+
     try {
       const response = await fetch(url, config);
+
+      console.log("API Service - Response:", {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
 
       if (!response.ok) {
         const errorData = await response
           .json()
           .catch(() => ({ detail: "Unknown error" }));
+        console.log("API Service - Error response:", errorData);
         throw new Error(errorData.detail || `HTTP ${response.status}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      console.log("API Service - Success response:", result);
+      return result;
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error);
+      console.error("Error details:", {
+        name: error instanceof Error ? error.name : "Unknown",
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       throw error;
     }
   }
@@ -210,10 +246,32 @@ class ApiService {
   }
 
   async createGroup(name: string, description?: string): Promise<Group> {
-    return this.request<Group>(API_CONFIG.ENDPOINTS.GROUPS.CREATE, {
-      method: "POST",
-      body: JSON.stringify({ name, description }),
+    console.log("API Service - createGroup called with:", {
+      name,
+      description,
     });
+    console.log(
+      "API Service - Making request to:",
+      `${this.baseUrl}${API_CONFIG.ENDPOINTS.GROUPS.CREATE}`
+    );
+    console.log("API Service - Base URL:", this.baseUrl);
+    console.log("API Service - Token available:", !!this.token);
+
+    try {
+      const result = await this.request<Group>(
+        API_CONFIG.ENDPOINTS.GROUPS.CREATE,
+        {
+          method: "POST",
+          body: JSON.stringify({ name, description }),
+        }
+      );
+
+      console.log("API Service - createGroup response:", result);
+      return result;
+    } catch (error) {
+      console.error("API Service - createGroup failed:", error);
+      throw error;
+    }
   }
 
   async getGroup(groupId: number): Promise<Group> {
