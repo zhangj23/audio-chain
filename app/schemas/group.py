@@ -56,7 +56,29 @@ class GroupInviteResponse(BaseModel):
 class GroupWithMembers(GroupResponse):
     members: List[GroupMemberResponse] = []
     pending_requests: List[GroupPendingRequestResponse] = []
+    current_prompt: Optional[dict] = None  # Current prompt for this group
 
 class GroupCreateResponse(GroupResponse):
     pending_requests: List[GroupPendingRequestResponse] = []
+    message: str
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+class GroupUpdateResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    message: str
+
+class PromptUpdate(BaseModel):
+    text: str
+    week_start: Optional[datetime] = None
+    week_end: Optional[datetime] = None
+
+class PromptUpdateResponse(BaseModel):
+    id: int
+    text: str
+    group_id: int
     message: str

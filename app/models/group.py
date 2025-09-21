@@ -21,6 +21,7 @@ class Group(Base):
     pending_requests = relationship("GroupPendingRequest", back_populates="group")
     video_submissions = relationship("VideoSubmission", back_populates="group")
     weekly_compilations = relationship("WeeklyCompilation", back_populates="group")
+    prompts = relationship("Prompt", back_populates="group")
 
 class GroupMember(Base):
     __tablename__ = "group_members"

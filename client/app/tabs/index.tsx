@@ -179,6 +179,7 @@ export default function HomeScreen() {
               setSelectedGroup(null);
               // TODO: Navigate to watch videos
             }}
+            onRefresh={refreshGroups}
             submittedVideo={
               selectedGroup ? submittedVideos[selectedGroup.id] || null : null
             }

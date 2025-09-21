@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.group import Group, GroupMember, GroupPendingRequest
 from app.models.video import VideoSubmission
+from app.models.prompt import Prompt
 from app.schemas.group import (
     GroupCreate, 
     GroupResponse, 
@@ -18,7 +19,11 @@ from app.schemas.group import (
     GroupPendingRequestResponse,
     GroupCreateResponse,
     GroupInvite,
-    GroupInviteResponse
+    GroupInviteResponse,
+    GroupUpdate,
+    GroupUpdateResponse,
+    PromptUpdate,
+    PromptUpdateResponse
 )
 from app.auth import get_current_user
 
@@ -186,6 +191,28 @@ async def get_my_groups(
             GroupPendingRequest.status == "pending"
         ).all()
         
+        # Get current active prompt for this group
+        current_prompt = db.query(Prompt).filter(
+            Prompt.group_id == group.id,
+            Prompt.is_active == True
+        ).first()
+        
+        print(f"DEBUG: Group {group.id} ({group.name}) - Found prompt: {current_prompt}")
+        
+        # Serialize current prompt if it exists
+        current_prompt_data = None
+        if current_prompt:
+            current_prompt_data = {
+                "id": current_prompt.id,
+                "text": current_prompt.text,
+                "week_start": current_prompt.week_start.isoformat() if current_prompt.week_start else None,
+                "week_end": current_prompt.week_end.isoformat() if current_prompt.week_end else None,
+                "is_active": current_prompt.is_active
+            }
+            print(f"DEBUG: Group {group.id} - Serialized prompt: {current_prompt_data}")
+        else:
+            print(f"DEBUG: Group {group.id} - No active prompt found")
+        
         group_data = GroupWithMembers(
             id=group.id,
             name=group.name,
@@ -209,8 +236,11 @@ async def get_my_groups(
                 status=pr.status,
                 created_at=pr.created_at,
                 expires_at=pr.expires_at
-            ) for pr in pending_requests]
+            ) for pr in pending_requests],
+            current_prompt=current_prompt_data
         )
+        
+        print(f"DEBUG: Group {group.id} - Final group_data.current_prompt: {group_data.current_prompt}")
         result.append(group_data)
     
     return result
@@ -456,4 +486,136 @@ async def invite_users_to_group(
         successful_invites=successful_invites,
         failed_invites=failed_invites,
         pending_requests=pending_request_responses
+    )
+
+@router.put("/{group_id}/settings", response_model=GroupUpdateResponse)
+async def update_group_settings(
+    group_id: int,
+    updates: GroupUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update group name and description (admin only)"""
+    # Check if user is a member of the group
+    membership = db.query(GroupMember).filter(
+        GroupMember.user_id == current_user.id,
+        GroupMember.group_id == group_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a member of this group"
+        )
+    
+    # Check if user is admin
+    if membership.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Only group admins can update settings"
+        )
+    
+    # Get the group
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+    
+    # Update group fields
+    if updates.name is not None:
+        group.name = updates.name
+    if updates.description is not None:
+        group.description = updates.description
+    
+    db.commit()
+    db.refresh(group)
+    
+    return GroupUpdateResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        message="Group settings updated successfully"
+    )
+
+@router.put("/{group_id}/prompt", response_model=PromptUpdateResponse)
+async def update_group_prompt(
+    group_id: int,
+    prompt_update: PromptUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update the current active prompt for a group (admin only)"""
+    print(f"DEBUG: update_group_prompt called for group {group_id} by user {current_user.id}")
+    print(f"DEBUG: prompt_update: {prompt_update}")
+    
+    # Check if user is a member of the group
+    membership = db.query(GroupMember).filter(
+        GroupMember.user_id == current_user.id,
+        GroupMember.group_id == group_id
+    ).first()
+    
+    if not membership:
+        print(f"DEBUG: User {current_user.id} is not a member of group {group_id}")
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a member of this group"
+        )
+    
+    print(f"DEBUG: User {current_user.id} is a member of group {group_id} with role: {membership.role}")
+    
+    # Check if user is admin
+    if membership.role != "admin":
+        print(f"DEBUG: User {current_user.id} is not an admin (role: {membership.role})")
+        raise HTTPException(
+            status_code=403,
+            detail="Only group admins can update prompts"
+        )
+    
+    # Get the group
+    group = db.query(Group).filter(Group.id == group_id).first()
+    if not group:
+        print(f"DEBUG: Group {group_id} not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Group not found"
+        )
+    
+    print(f"DEBUG: Found group {group_id}: {group.name}")
+    
+    # Deactivate current active prompt
+    current_prompt = db.query(Prompt).filter(
+        Prompt.group_id == group_id,
+        Prompt.is_active == True
+    ).first()
+    
+    if current_prompt:
+        print(f"DEBUG: Deactivating current prompt {current_prompt.id}")
+        current_prompt.is_active = False
+        db.commit()
+    else:
+        print(f"DEBUG: No current active prompt found for group {group_id}")
+    
+    # Create new prompt
+    print(f"DEBUG: Creating new prompt with text: {prompt_update.text}")
+    new_prompt = Prompt(
+        text=prompt_update.text,
+        group_id=group_id,
+        week_start=prompt_update.week_start or datetime.utcnow(),
+        week_end=prompt_update.week_end or (datetime.utcnow() + timedelta(days=7)),
+        is_active=True
+    )
+    
+    db.add(new_prompt)
+    db.commit()
+    db.refresh(new_prompt)
+    
+    print(f"DEBUG: Created new prompt {new_prompt.id} for group {group_id}")
+    
+    return PromptUpdateResponse(
+        id=new_prompt.id,
+        text=new_prompt.text,
+        group_id=group_id,
+        message="Group prompt updated successfully"
     )

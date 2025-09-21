@@ -151,6 +151,10 @@ export function GroupSettings({ group, onBack, onSave }: GroupSettingsProps) {
   };
 
   const saveChanges = () => {
+    console.log("GroupSettings - saveChanges called with:", {
+      name: groupName,
+      prompt: selectedPrompt,
+    });
     onSave({
       name: groupName,
       prompt: selectedPrompt,

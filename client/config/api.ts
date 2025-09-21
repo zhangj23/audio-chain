@@ -1,7 +1,7 @@
 // API configuration for the Weave frontend
 export const API_CONFIG = {
   // Base URL for the backend API
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || "http://129.161.69.14:8000",
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || "http://129.161.69.91:8000",
 
   // Development settings
   SKIP_AUTH: process.env.EXPO_PUBLIC_SKIP_AUTH === "true",

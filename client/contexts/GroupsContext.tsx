@@ -57,6 +57,15 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
         "groups"
       );
 
+      // Debug: Log the current prompt for each group
+      groupsData.forEach((group, index) => {
+        console.log(`GroupsContext: Group ${index + 1} (${group.name}):`, {
+          id: group.id,
+          name: group.name,
+          current_prompt: group.current_prompt,
+        });
+      });
+
       // Fetch video stats for each group
       const groupsWithStats = await Promise.all(
         groupsData.map(async (group) => {

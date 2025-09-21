@@ -44,6 +44,7 @@ interface GroupDetailProps {
   onBack: () => void;
   onRecord: (groupId: number) => void;
   onWatchVideos: (group: any) => void;
+  onRefresh?: () => void;
   submittedVideo?: {
     uri: string;
     duration: number;
@@ -66,10 +67,17 @@ export function GroupDetail({
   onBack,
   onRecord,
   onWatchVideos,
+  onRefresh,
   submittedVideo,
   currentUserId,
   userSubmissions = [],
 }: GroupDetailProps) {
+  // Debug: Log the group data received
+  console.log("GroupDetail: Received group data:", {
+    id: group.id,
+    name: group.name,
+    current_prompt: group.current_prompt,
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [invitedUsers, setInvitedUsers] = useState<string[]>([]);
@@ -108,9 +116,44 @@ export function GroupDetail({
     }
   };
 
-  const handleSettingsSave = (updates: any) => {
-    console.log("Settings updated:", updates);
-    setShowSettings(false);
+  const handleSettingsSave = async (updates: any) => {
+    try {
+      console.log("GroupDetail - handleSettingsSave called with:", updates);
+
+      // Check if name actually changed
+      const nameChanged = updates.name && updates.name !== group.name;
+      const descriptionChanged =
+        updates.description && updates.description !== group.description;
+
+      // Update group settings if name or description actually changed
+      if (nameChanged || descriptionChanged) {
+        console.log("GroupDetail - Updating group settings...");
+        await apiService.updateGroupSettings(group.id, {
+          name: updates.name,
+          description: updates.description,
+        });
+      }
+
+      // Update group prompt if prompt changed
+      if (updates.prompt) {
+        console.log("GroupDetail - Updating group prompt...");
+        await apiService.updateGroupPrompt(group.id, updates.prompt);
+      }
+
+      setShowSettings(false);
+
+      // Refresh group data to show updated information
+      if (onRefresh) {
+        console.log("GroupDetail - Calling onRefresh to update group data");
+        onRefresh();
+      } else {
+        console.log("GroupDetail - onRefresh is not available");
+      }
+      console.log("GroupDetail - Group settings updated successfully");
+    } catch (error) {
+      console.error("GroupDetail - Failed to update group settings:", error);
+      // TODO: Show error message to user
+    }
   };
 
   const openInviteModal = () => {
@@ -120,17 +163,17 @@ export function GroupDetail({
   const handleInvite = async (userIds: string[]) => {
     try {
       console.log("Inviting users to group:", group.id, userIds);
-      
+
       // Fetch all users to get usernames for the selected user IDs
       const allUsers = await apiService.getUsers();
-      
-      const usernames = userIds.map(id => {
-        const user = allUsers.find(u => u.id.toString() === id);
+
+      const usernames = userIds.map((id) => {
+        const user = allUsers.find((u) => u.id.toString() === id);
         return user?.username || id;
       });
-      
+
       const response = await apiService.inviteUsers(group.id, usernames);
-      
+
       // Update the invited users list with successfully invited users
       if (response.successful_invites.length > 0) {
         const successfulUserIds = userIds.filter((id, index) => {
@@ -141,32 +184,33 @@ export function GroupDetail({
           userIds,
           usernames,
           successful_invites: response.successful_invites,
-          successfulUserIds
+          successfulUserIds,
         });
-        setInvitedUsers(prev => {
+        setInvitedUsers((prev) => {
           const newList = [...prev, ...successfulUserIds];
           console.log("DEBUG: Updated invitedUsers:", newList);
           return newList;
         });
       }
-      
+
       let alertMessage = response.message;
       if (response.failed_invites.length > 0) {
-        alertMessage += `\n\nFailed invites: ${response.failed_invites.join(', ')}`;
+        alertMessage += `\n\nFailed invites: ${response.failed_invites.join(
+          ", "
+        )}`;
       }
-      
+
       Alert.alert(
-        response.successful_invites.length > 0 ? "Invites Sent!" : "Invite Issues",
+        response.successful_invites.length > 0
+          ? "Invites Sent!"
+          : "Invite Issues",
         alertMessage
       );
-      
+
       setShowInviteModal(false);
     } catch (error) {
       console.error("Failed to send invites:", error);
-      Alert.alert(
-        "Error",
-        "Failed to send invites. Please try again."
-      );
+      Alert.alert("Error", "Failed to send invites. Please try again.");
     }
   };
 
@@ -430,9 +474,14 @@ export function GroupDetail({
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {group.members?.length > 0 
-                    ? Math.round(((userSubmissions?.length || 0) / group.members.length) * 100)
-                    : 0}%
+                  {group.members?.length > 0
+                    ? Math.round(
+                        ((userSubmissions?.length || 0) /
+                          group.members.length) *
+                          100
+                      )
+                    : 0}
+                  %
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Complete</ThemedText>
               </View>
@@ -575,7 +624,9 @@ export function GroupDetail({
             <ThemedText style={styles.sectionTitle}>
               {group.isWeaved
                 ? "Weaved Video"
-                : `Videos (${userSubmissions?.length || 0}/${group.members?.length || 0})`}
+                : `Videos (${userSubmissions?.length || 0}/${
+                    group.members?.length || 0
+                  })`}
             </ThemedText>
             {group.isWeaved ? (
               <TouchableOpacity
@@ -668,7 +719,10 @@ export function GroupDetail({
             <ThemedText style={styles.sectionTitle}>
               Members ({group.members?.length || 0})
             </ThemedText>
-            <TouchableOpacity style={styles.sectionAction} onPress={openInviteModal}>
+            <TouchableOpacity
+              style={styles.sectionAction}
+              onPress={openInviteModal}
+            >
               <IconSymbol name="person.badge.plus" size={16} color="#007AFF" />
               <ThemedText style={styles.sectionActionText}>Invite</ThemedText>
             </TouchableOpacity>
@@ -885,9 +939,13 @@ export function GroupDetail({
         onClose={() => setShowInviteModal(false)}
         onInvite={handleInvite}
         groupId={group.id.toString()}
-        existingMembers={group.members?.map(member => 
-          typeof member === 'string' ? member : member.user_id?.toString() || ''
-        ) || []}
+        existingMembers={
+          group.members?.map((member) =>
+            typeof member === "string"
+              ? member
+              : member.user_id?.toString() || ""
+          ) || []
+        }
         invitedUsers={invitedUsers}
       />
     </ThemedView>
