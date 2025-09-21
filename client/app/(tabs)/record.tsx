@@ -21,6 +21,7 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import { videoStorage } from "../../utils/videoStorage";
+import { apiService } from "../../services/api";
 
 // Mock groups data (in real app, this would come from props or context)
 const mockGroups = [
