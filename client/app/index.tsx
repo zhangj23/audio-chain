@@ -1,7 +1,5 @@
-import { Redirect } from 'expo-router';
+import { AuthGuard } from "@/components/AuthGuard";
 
 export default function Index() {
-  return <Redirect href="/(tabs)" />;
+  return <AuthGuard>{null}</AuthGuard>;
 }
-
-

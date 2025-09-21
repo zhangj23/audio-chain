@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, DeleteAccountRequest
+from app.schemas.user import UserCreate, UserResponse, UserLogin, Token, AuthResponse, DeleteAccountRequest
 from app.auth import (
     get_password_hash, 
     authenticate_user, 
@@ -14,7 +14,7 @@ from app.auth import (
 
 router = APIRouter()
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=AuthResponse)
 async def register_user(user: UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -43,9 +43,19 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_user)
     
-    return db_user
+    # Generate JWT token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.email}, expires_delta=access_token_expires
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": db_user
+    }
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=AuthResponse)
 async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db)):
     user = authenticate_user(db, user_credentials.email, user_credentials.password)
     if not user:
@@ -60,11 +70,23 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user
+    }
 
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+@router.post("/logout")
+async def logout_user(current_user: User = Depends(get_current_user)):
+    """
+    Logout user - in JWT-based auth, logout is handled client-side
+    by removing the token. This endpoint exists for consistency.
+    """
+    return {"message": "Logged out successfully"}
 
 @router.delete("/account")
 async def delete_account(

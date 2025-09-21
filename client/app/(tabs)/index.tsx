@@ -5,7 +5,11 @@ import {
   View,
   Alert,
   Modal,
+  Dimensions,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -13,316 +17,251 @@ import { GroupDetail } from "@/components/group-detail";
 import { CreateGroupModal } from "@/components/create-group-modal";
 import { useState, useEffect } from "react";
 import { videoStorage } from "../../utils/videoStorage";
+import { useGroups } from "@/contexts/GroupsContext";
+import { useAuth } from "@/contexts/AuthContext";
 
-// const { width } = Dimensions.get("window"); // Unused for now
+const { width, height } = Dimensions.get("window");
 
-// Mock group data
-const mockGroups = [
+// Mock notifications data
+const mockNotifications = [
   {
-    id: "1",
-    name: "College Friends 🎓",
-    members: ["You", "Alice", "Mike", "Sara"],
-    videosSubmitted: 2,
-    totalMembers: 4,
-    dueDate: "2h left",
-    prompt: "Show us your vibe right now! ✨",
-    isRevealed: false,
+    id: 1,
+    type: "submission_reminder",
+    groupName: "College Friends 🎓",
+    message: "Don't forget to submit your photo! 2h left",
+    time: "5 min ago",
+    urgent: true,
   },
   {
-    id: "2",
-    name: "Family Fun 👨‍👩‍👧‍👦",
-    members: ["You", "Mom", "Dad", "Sister"],
-    videosSubmitted: 4,
-    totalMembers: 4,
-    dueDate: "Completed",
-    prompt: "What's making you smile rn? 😊",
-    isRevealed: true,
+    id: 2,
+    type: "submission_reminder",
+    groupName: "Work Squad 💼",
+    message: "Your friends are waiting for your photo",
+    time: "1h ago",
+    urgent: false,
   },
   {
-    id: "3",
-    name: "Work Squad 💼",
-    members: ["You", "John", "Emma", "David", "Lisa"],
-    videosSubmitted: 1,
-    totalMembers: 5,
-    dueDate: "1d left",
-    prompt: "Drop your main character moment 💫",
-    isRevealed: false,
+    id: 3,
+    type: "group_complete",
+    groupName: "Family Fun 👨‍👩‍👧‍👦",
+    message: "All photos submitted! Ready to view",
+    time: "3h ago",
+    urgent: false,
+  },
+  {
+    id: 4,
+    type: "submission_reminder",
+    groupName: "Fitness Crew 💪",
+    message: "Time to show your workout!",
+    time: "1d ago",
+    urgent: false,
   },
 ];
 
 export default function HomeScreen() {
-  const [groups, setGroups] = useState(mockGroups);
-  // const [selectedGroup, setSelectedGroup] = useState(mockGroups[0]); // Unused for now
-  const [showGroupDetail, setShowGroupDetail] = useState(false);
-  const [showCreateGroup, setShowCreateGroup] = useState(false);
-  const [detailGroup, setDetailGroup] = useState<any>(null);
-  const [submittedVideos, setSubmittedVideos] = useState<{
-    [groupId: string]: any;
-  }>({});
+  const router = useRouter();
+  const { groups, isLoading, error, refreshGroups } = useGroups();
+  const { user } = useAuth();
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Subscribe to video storage changes
-  useEffect(() => {
-    const unsubscribe = videoStorage.subscribe((videos) => {
-      setSubmittedVideos(videos);
-    });
-
-    // Load initial videos
-    setSubmittedVideos(videoStorage.getAllVideos());
-
-    return unsubscribe;
-  }, []);
-
-  const createNewGroup = () => {
-    setShowCreateGroup(true);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshGroups();
+    } finally {
+      setRefreshing(false);
+    }
   };
 
-  const handleCreateGroup = (groupData: {
-    name: string;
-    prompt: string;
-    deadline: string;
-    members: string[];
-  }) => {
-    const newGroup = {
-      id: Date.now().toString(),
-      name: groupData.name,
-      members: groupData.members,
-      videosSubmitted: 0,
-      totalMembers: groupData.members.length,
-      dueDate: groupData.deadline,
-      prompt: groupData.prompt,
-      isRevealed: false,
-    };
+  const handleGroupPress = (group: any) => {
+    setSelectedGroup(group);
+  };
 
-    setGroups((prevGroups) => [newGroup, ...prevGroups]);
+  const handleCreateGroup = () => {
+    setShowCreateModal(true);
+  };
 
-    Alert.alert(
-      "Group Created! 🎉",
-      `"${groupData.name}" has been created successfully!`,
-      [{ text: "OK" }]
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+  };
+
+  const handleGroupCreated = () => {
+    setShowCreateModal(false);
+    refreshGroups();
+  };
+
+  const renderNotification = (notification: any) => (
+    <View
+      key={notification.id}
+      style={[
+        styles.notificationItem,
+        notification.urgent && styles.urgentNotification,
+      ]}
+    >
+      <View style={styles.notificationContent}>
+        <ThemedText style={styles.notificationMessage}>
+          {notification.message}
+        </ThemedText>
+        <ThemedText style={styles.notificationTime}>
+          {notification.time}
+        </ThemedText>
+      </View>
+      {notification.urgent && (
+        <View style={styles.urgentBadge}>
+          <ThemedText style={styles.urgentText}>!</ThemedText>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderGroupCard = (group: any) => (
+    <TouchableOpacity
+      key={group.id}
+      style={styles.groupCard}
+      onPress={() => handleGroupPress(group)}
+    >
+      <View style={styles.groupHeader}>
+        <ThemedText style={styles.groupName}>{group.name}</ThemedText>
+        <View style={styles.groupStatus}>
+          <ThemedText style={styles.memberCount}>
+            {group.memberCount} members
+          </ThemedText>
+          <ThemedText style={styles.dueDate}>{group.dueDate}</ThemedText>
+        </View>
+      </View>
+
+      <ThemedText style={styles.groupPrompt}>{group.current_prompt}</ThemedText>
+
+      <View style={styles.groupActions}>
+        <TouchableOpacity style={styles.actionButton}>
+          <IconSymbol name="camera" size={16} color="#2563eb" />
+          <ThemedText style={styles.actionText}>Record</ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton}>
+          <IconSymbol name="play" size={16} color="#10b981" />
+          <ThemedText style={styles.actionText}>View</ThemedText>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+
+  if (isLoading) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2563eb" />
+        <ThemedText style={styles.loadingText}>Loading groups...</ThemedText>
+      </ThemedView>
     );
-  };
+  }
 
-  const navigateToGroup = (group: any) => {
-    setDetailGroup(group);
-    setShowGroupDetail(true);
-  };
-
-  const joinGroup = (groupId: string) => {
-    Alert.alert(
-      "Record Video",
-      "Navigate to recording screen for this group?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Record", onPress: () => console.log("Navigate to record") },
-      ]
+  if (error) {
+    return (
+      <ThemedView style={styles.errorContainer}>
+        <ThemedText style={styles.errorText}>Error: {error}</ThemedText>
+        <TouchableOpacity style={styles.retryButton} onPress={refreshGroups}>
+          <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+        </TouchableOpacity>
+      </ThemedView>
     );
-  };
-
-  const viewCompletedGroup = (group: any) => {
-    Alert.alert(
-      "View Group Videos",
-      `All ${group.totalMembers} members have submitted their videos!`,
-      [{ text: "Watch", onPress: () => console.log("View videos") }]
-    );
-  };
+  }
 
   return (
     <ThemedView style={styles.container}>
-      {/* Header - BeReal Style */}
-      <View style={styles.header}>
-        <ThemedText style={styles.headerTitle}>Weave.</ThemedText>
-        <TouchableOpacity style={styles.addButton} onPress={createNewGroup}>
-          <ThemedText style={styles.addButtonText}>+</ThemedText>
-        </TouchableOpacity>
-      </View>
-
-      {/* Your Groups - Vertical Card Layout */}
       <ScrollView
-        style={styles.groupsSection}
-        showsVerticalScrollIndicator={false}
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        {groups.map((group) => {
-          const hasSubmittedVideo = submittedVideos[group.id];
-
-          return (
-            <TouchableOpacity
-              key={group.id}
-              style={styles.groupCard}
-              onPress={() => navigateToGroup(group)}
-            >
-              <View style={styles.groupContent}>
-                <View style={styles.groupHeader}>
-                  <ThemedText style={styles.groupName}>{group.name}</ThemedText>
-                  <View style={styles.groupHeaderRight}>
-                    <ThemedText style={styles.groupTime}>
-                      {group.dueDate}
-                    </ThemedText>
-                    {hasSubmittedVideo && (
-                      <View style={styles.submittedBadge}>
-                        <IconSymbol
-                          name="checkmark.circle.fill"
-                          size={16}
-                          color="#4CAF50"
-                        />
-                      </View>
-                    )}
-                  </View>
-                </View>
-
-                <ThemedText style={styles.groupPrompt}>
-                  {group.prompt}
-                </ThemedText>
-
-                {/* Video Preview Section */}
-                <View style={styles.previewSection}>
-                  {group.videosSubmitted > 0 || hasSubmittedVideo ? (
-                    <View style={styles.videoPreviewContainer}>
-                      <View style={styles.videoPreviewGrid}>
-                        {/* Show user's own video if submitted */}
-                        {hasSubmittedVideo && (
-                          <View style={styles.videoThumbnail}>
-                            <View style={styles.userVideo}>
-                              <IconSymbol
-                                name="play.fill"
-                                size={12}
-                                color="#fff"
-                              />
-                            </View>
-                          </View>
-                        )}
-                        {/* Show blurred thumbnails for other submitted videos only if group not revealed */}
-                        {!group.isRevealed &&
-                          Array.from({
-                            length: Math.min(
-                              group.videosSubmitted,
-                              hasSubmittedVideo ? 3 : 4
-                            ),
-                          }).map((_, index) => (
-                            <View key={index} style={styles.videoThumbnail}>
-                              <View style={styles.blurredVideo}>
-                                <IconSymbol
-                                  name="eye.slash.fill"
-                                  size={12}
-                                  color="#666"
-                                />
-                              </View>
-                            </View>
-                          ))}
-                        {/* Show clear thumbnails if group is revealed */}
-                        {group.isRevealed &&
-                          Array.from({
-                            length: Math.min(
-                              group.videosSubmitted,
-                              hasSubmittedVideo ? 3 : 4
-                            ),
-                          }).map((_, index) => (
-                            <View key={index} style={styles.videoThumbnail}>
-                              <View style={styles.revealedVideo}>
-                                <IconSymbol
-                                  name="play.fill"
-                                  size={12}
-                                  color="#fff"
-                                />
-                              </View>
-                            </View>
-                          ))}
-                        {group.videosSubmitted > 4 && (
-                          <View style={styles.moreVideos}>
-                            <ThemedText style={styles.moreVideosText}>
-                              +{group.videosSubmitted - 4}
-                            </ThemedText>
-                          </View>
-                        )}
-                      </View>
-                      <ThemedText style={styles.previewText}>
-                        {group.isRevealed
-                          ? "Tap to watch all videos"
-                          : hasSubmittedVideo
-                          ? "Your video submitted! Others hidden until everyone posts"
-                          : "Videos are hidden until everyone posts"}
-                      </ThemedText>
-                    </View>
-                  ) : (
-                    <View style={styles.emptyPreviewContainer}>
-                      <View style={styles.emptyPreviewIcon}>
-                        <IconSymbol name="camera" size={24} color="#444" />
-                      </View>
-                      <ThemedText style={styles.emptyPreviewText}>
-                        {group.members.includes("You")
-                          ? "Be the first to post! 🚀"
-                          : "Waiting for the first video..."}
-                      </ThemedText>
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.groupStats}>
-                  <ThemedText style={styles.statsText}>
-                    {group.videosSubmitted}/{group.totalMembers} posted
-                  </ThemedText>
-                  <View style={styles.rightSection}>
-                    {group.videosSubmitted < group.totalMembers && (
-                      <View style={styles.pendingIndicator}>
-                        <ThemedText style={styles.pendingText}>
-                          pending
-                        </ThemedText>
-                      </View>
-                    )}
-                    {group.isRevealed && (
-                      <View style={styles.revealedBadge}>
-                        <ThemedText style={styles.revealedText}>
-                          ⚡ Ready to view
-                        </ThemedText>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Create New Group - BeReal Style */}
-        <TouchableOpacity
-          style={styles.createGroupCard}
-          onPress={createNewGroup}
-        >
-          <View style={styles.createGroupContent}>
-            <ThemedText style={styles.createGroupText}>
-              + Start a new challenge
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <ThemedText type="title" style={styles.welcomeText}>
+              Welcome back!
+            </ThemedText>
+            <ThemedText style={styles.subtitle}>
+              Ready to create some memories?
             </ThemedText>
           </View>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push("/(tabs)/explore")}
+          >
+            <IconSymbol name="person.circle" size={32} color="#2563eb" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Notifications */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Notifications</ThemedText>
+            <TouchableOpacity>
+              <ThemedText style={styles.seeAllText}>See all</ThemedText>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.notificationsScroll}
+          >
+            {mockNotifications.map(renderNotification)}
+          </ScrollView>
+        </View>
+
+        {/* Groups */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <ThemedText style={styles.sectionTitle}>Your Groups</ThemedText>
+            <TouchableOpacity onPress={handleCreateGroup}>
+              <ThemedText style={styles.seeAllText}>+ Create</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {groups.length === 0 ? (
+            <View style={styles.emptyState}>
+              <IconSymbol name="person.2" size={48} color="#9ca3af" />
+              <ThemedText style={styles.emptyTitle}>No groups yet</ThemedText>
+              <ThemedText style={styles.emptySubtitle}>
+                Create your first group or join one to get started!
+              </ThemedText>
+              <TouchableOpacity
+                style={styles.createButton}
+                onPress={handleCreateGroup}
+              >
+                <ThemedText style={styles.createButtonText}>
+                  Create Group
+                </ThemedText>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.groupsContainer}>
+              {groups.map(renderGroupCard)}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       {/* Group Detail Modal */}
       <Modal
-        visible={showGroupDetail}
+        visible={selectedGroup !== null}
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        {detailGroup && (
+        {selectedGroup && (
           <GroupDetail
-            group={detailGroup}
-            onBack={() => setShowGroupDetail(false)}
-            onRecord={(groupId) => {
-              setShowGroupDetail(false);
-              joinGroup(groupId);
-            }}
-            onWatchVideos={(group) => {
-              setShowGroupDetail(false);
-              viewCompletedGroup(group);
-            }}
-            submittedVideo={submittedVideos[detailGroup.id] || null}
+            group={selectedGroup}
+            onClose={() => setSelectedGroup(null)}
           />
         )}
       </Modal>
 
       {/* Create Group Modal */}
       <CreateGroupModal
-        visible={showCreateGroup}
-        onClose={() => setShowCreateGroup(false)}
-        onCreateGroup={handleCreateGroup}
+        visible={showCreateModal}
+        onClose={handleCloseModal}
+        onGroupCreated={handleGroupCreated}
       />
     </ThemedView>
   );
@@ -331,230 +270,207 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    opacity: 0.7,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 16,
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#dc2626",
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "white",
+    fontWeight: "600",
+  },
+  scrollView: {
+    flex: 1,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 30,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: "#fff",
-    letterSpacing: -0.5,
-  },
-  addButton: {
-    width: 32,
-    height: 32,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-  },
-  addButtonText: {
-    fontSize: 20,
-    fontWeight: "300",
-    color: "#000",
-  },
-  groupsSection: {
-    flex: 1,
     paddingTop: 20,
+    paddingBottom: 16,
   },
-  groupCard: {
-    backgroundColor: "#111",
-    marginHorizontal: 20,
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+  subtitle: {
+    fontSize: 16,
+    opacity: 0.7,
+    marginTop: 4,
+  },
+  profileButton: {
+    padding: 8,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
     marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  seeAllText: {
+    fontSize: 16,
+    color: "#2563eb",
+    fontWeight: "600",
+  },
+  notificationsScroll: {
+    paddingLeft: 20,
+  },
+  notificationItem: {
+    backgroundColor: "#f8fafc",
     borderRadius: 12,
     padding: 16,
+    marginRight: 12,
+    width: width * 0.7,
     borderWidth: 1,
-    borderColor: "#222",
+    borderColor: "#e2e8f0",
   },
-  groupContent: {
-    gap: 8,
+  urgentNotification: {
+    borderColor: "#fbbf24",
+    backgroundColor: "#fef3c7",
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  notificationMessage: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  notificationTime: {
+    fontSize: 12,
+    opacity: 0.6,
+  },
+  urgentBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "#f59e0b",
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  urgentText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  groupsContainer: {
+    paddingHorizontal: 20,
+    gap: 16,
+  },
+  groupCard: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
   },
   groupHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    marginBottom: 8,
   },
   groupName: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    flex: 1,
   },
-  groupTime: {
+  groupStatus: {
+    alignItems: "flex-end",
+  },
+  memberCount: {
     fontSize: 12,
-    color: "#888",
-    fontWeight: "400",
+    opacity: 0.6,
+  },
+  dueDate: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#2563eb",
   },
   groupPrompt: {
     fontSize: 14,
-    color: "#ccc",
-    lineHeight: 18,
-    fontWeight: "400",
-  },
-  previewSection: {
-    marginVertical: 12,
-  },
-  videoPreviewContainer: {
-    gap: 8,
-  },
-  videoPreviewGrid: {
-    flexDirection: "row",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  videoThumbnail: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    overflow: "hidden",
-  },
-  blurredVideo: {
-    flex: 1,
-    backgroundColor: "#333",
-    justifyContent: "center",
-    alignItems: "center",
-    opacity: 0.7,
-  },
-  moreVideos: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: "#444",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  moreVideosText: {
-    fontSize: 10,
-    color: "#888",
-    fontWeight: "600",
-  },
-  previewText: {
-    fontSize: 11,
-    color: "#888",
+    opacity: 0.8,
+    marginBottom: 16,
     fontStyle: "italic",
   },
-  emptyPreviewContainer: {
+  groupActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
+    gap: 6,
     paddingHorizontal: 12,
-    backgroundColor: "#0a0a0a",
+    paddingVertical: 8,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#222",
-    borderStyle: "dashed",
+    backgroundColor: "#f1f5f9",
   },
-  emptyPreviewIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: "#1a1a1a",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyPreviewText: {
-    fontSize: 12,
-    color: "#666",
-    flex: 1,
-  },
-  groupStats: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 4,
-  },
-  rightSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  statsText: {
-    fontSize: 12,
-    color: "#888",
+  actionText: {
+    fontSize: 14,
     fontWeight: "500",
   },
-  pendingIndicator: {
-    backgroundColor: "#333",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  emptyState: {
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
-  pendingText: {
-    fontSize: 10,
-    color: "#888",
-    fontWeight: "500",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 16,
+    marginBottom: 8,
   },
-  revealedBadge: {
-    backgroundColor: "#fff",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-    marginTop: 4,
+  emptySubtitle: {
+    fontSize: 14,
+    opacity: 0.7,
+    textAlign: "center",
+    marginBottom: 24,
   },
-  revealedText: {
-    fontSize: 11,
-    color: "#000",
+  createButton: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  createButtonText: {
+    color: "white",
     fontWeight: "600",
-  },
-  createGroupCard: {
-    backgroundColor: "#111",
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#333",
-    borderStyle: "dashed",
-  },
-  createGroupContent: {
-    alignItems: "center",
-  },
-  createGroupText: {
-    fontSize: 16,
-    color: "#888",
-    fontWeight: "500",
-  },
-  groupHeaderRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  submittedBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(76, 175, 80, 0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  userVideo: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#333",
-    borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#4CAF50",
-  },
-  revealedVideo: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#444",
-    borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
   },
 });

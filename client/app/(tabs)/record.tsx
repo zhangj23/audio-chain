@@ -21,6 +21,7 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import { videoStorage } from "../../utils/videoStorage";
+import { apiService } from "../../services/api";
 
 // Mock groups data (in real app, this would come from props or context)
 const mockGroups = [
@@ -65,12 +66,16 @@ export default function RecordScreen() {
   const [flash, setFlash] = useState(false);
   const [isPressed, setIsPressed] = useState(false);
   const [recordedVideoUri, setRecordedVideoUri] = useState<string | null>(null);
+
+  // Animation for the enlarging red circle
+  const circleScaleAnim = useRef(new Animated.Value(1)).current;
+  const circleOpacityAnim = useRef(new Animated.Value(0)).current;
   const [showVideoPreview, setShowVideoPreview] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showEffects, setShowEffects] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   // Note: Video storage is now handled by shared videoStorage utility
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const videoRef = useRef<Video>(null);
 
@@ -110,6 +115,19 @@ export default function RecordScreen() {
     };
   }, []);
 
+  // Set camera ready after permissions are granted with a short delay
+  useEffect(() => {
+    if (cameraPermission?.granted) {
+      const timer = setTimeout(() => {
+        setIsCameraReady(true);
+      }, 1000); // Give camera 1 second to initialize
+
+      return () => clearTimeout(timer);
+    } else {
+      setIsCameraReady(false);
+    }
+  }, [cameraPermission?.granted, cameraType]);
+
   // Check and request permissions
   const checkPermissions = async () => {
     if (!cameraPermission?.granted) {
@@ -143,7 +161,7 @@ export default function RecordScreen() {
     const hasPermissions = await checkPermissions();
     if (!hasPermissions) return;
 
-    if (!cameraRef.current) {
+    if (!cameraRef.current || !isCameraReady) {
       Alert.alert("Error", "Camera not ready. Please try again.");
       return;
     }
@@ -165,6 +183,16 @@ export default function RecordScreen() {
           toValue: 1,
           duration: MAX_RECORDING_TIME * 1000,
           useNativeDriver: false,
+        }),
+        // Start circle animation - enlarge and fade in
+        Animated.spring(circleScaleAnim, {
+          toValue: 2.5,
+          useNativeDriver: true,
+        }),
+        Animated.timing(circleOpacityAnim, {
+          toValue: 0.3,
+          duration: 200,
+          useNativeDriver: true,
         }),
       ]).start();
 
@@ -223,6 +251,16 @@ export default function RecordScreen() {
         toValue: 0,
         duration: 200,
         useNativeDriver: false,
+      }),
+      // Reset circle animation
+      Animated.spring(circleScaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.timing(circleOpacityAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
       }),
     ]).start();
 
@@ -288,7 +326,9 @@ export default function RecordScreen() {
   };
 
   const switchCamera = () => {
+    setIsCameraReady(false);
     setCameraType((current) => (current === "back" ? "front" : "back"));
+    // Camera ready state will be set by the useEffect when cameraType changes
   };
 
   const toggleFlash = () => {
@@ -308,8 +348,44 @@ export default function RecordScreen() {
   };
 
   const submitVideo = async () => {
-    if (recordedVideoUri) {
-      // Store the video for this group using shared storage
+    if (!recordedVideoUri) return;
+
+    try {
+      // Show loading state
+      Alert.alert("Uploading...", "Please wait while your video is uploaded.");
+
+      // Create FormData for the video file
+      const formData = new FormData();
+      
+      // For React Native, we need to create a file object from the URI
+      const videoFile = {
+        uri: recordedVideoUri,
+        type: 'video/mp4',
+        name: `video_${Date.now()}.mp4`,
+      } as any;
+      
+      formData.append('video', videoFile);
+      formData.append('group_id', selectedGroupId);
+      formData.append('duration', recordingTime.toString());
+
+      // Upload to backend
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://129.161.69.14:8000'}/videos/upload`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          // Add auth token if available
+          ...(await getAuthHeaders()),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      // Also store locally for offline access
       videoStorage.addVideo(selectedGroupId, {
         uri: recordedVideoUri,
         duration: recordingTime,
@@ -321,6 +397,12 @@ export default function RecordScreen() {
         `Your video was posted to ${selectedGroup.name}!`
       );
       closeVideoPreview();
+    } catch (error) {
+      console.error("Video upload failed:", error);
+      Alert.alert(
+        "Upload Failed",
+        "Failed to upload your video. Please try again."
+      );
     }
   };
 
@@ -330,14 +412,6 @@ export default function RecordScreen() {
 
   const closeSettings = () => {
     setShowSettings(false);
-  };
-
-  const openEffects = () => {
-    setShowEffects(true);
-  };
-
-  const closeEffects = () => {
-    setShowEffects(false);
   };
 
   const toggleVideoPlayback = async () => {
@@ -368,50 +442,21 @@ export default function RecordScreen() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemedView style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.groupSelector}
-            onPress={() => setShowGroupSelector(true)}
-          >
-            <ThemedText style={styles.groupName}>
-              {selectedGroup.name}
-            </ThemedText>
-            <IconSymbol name="chevron.down" size={16} color="#fff" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={openSettings}
-          >
-            <IconSymbol name="gearshape.fill" size={20} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Prompt */}
-        <View style={styles.promptContainer}>
-          <ThemedText style={styles.prompt}>
-            &quot;{selectedGroup.prompt}&quot;
-          </ThemedText>
-          <ThemedText style={styles.timeLeft}>
-            {selectedGroup.dueDate}
-          </ThemedText>
-        </View>
-
-        {/* Camera Preview */}
-        <View style={styles.cameraPreview}>
+      <View style={styles.container}>
+        {/* Full Screen Camera Background */}
+        <View style={styles.cameraContainer}>
           {cameraPermission?.granted ? (
             <CameraView
               ref={cameraRef}
-              style={styles.camera}
+              style={styles.fullScreenCamera}
               facing={cameraType}
               mode="video"
               enableTorch={flash}
               mute={false}
+              videoQuality="1080p"
             />
           ) : (
-            <View style={styles.cameraPlaceholder}>
+            <View style={styles.fullScreenCameraPlaceholder}>
               <IconSymbol name="camera.fill" size={60} color="#444" />
               <ThemedText style={styles.cameraText}>
                 Camera access required
@@ -426,6 +471,39 @@ export default function RecordScreen() {
               </TouchableOpacity>
             </View>
           )}
+        </View>
+
+        {/* UI Overlay */}
+        <View style={styles.uiOverlay}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.groupSelector}
+              onPress={() => setShowGroupSelector(true)}
+            >
+              <ThemedText style={styles.groupName}>
+                {selectedGroup.name}
+              </ThemedText>
+              <IconSymbol name="chevron.down" size={16} color="#fff" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={openSettings}
+            >
+              <IconSymbol name="gearshape.fill" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Prompt */}
+          <View style={styles.promptContainer}>
+            <ThemedText style={styles.prompt}>
+              &quot;{selectedGroup.prompt}&quot;
+            </ThemedText>
+            <ThemedText style={styles.timeLeft}>
+              {selectedGroup.dueDate}
+            </ThemedText>
+          </View>
 
           {/* Minimalist Timer */}
           {isRecording && (
@@ -437,117 +515,136 @@ export default function RecordScreen() {
           {/* Recording Indicator Dot */}
           {isRecording && <View style={styles.recordingDot} />}
 
-          {/* Top Controls */}
-          <View style={styles.topControls}>
-            <TouchableOpacity
-              style={styles.topControlButton}
-              onPress={switchCamera}
-            >
-              <IconSymbol
-                name="arrow.triangle.2.circlepath.camera"
-                size={24}
-                color="#fff"
-              />
-            </TouchableOpacity>
+          {/* Spacer to push bottom controls down */}
+          <View style={styles.spacer} />
 
-            <TouchableOpacity
-              style={styles.topControlButton}
-              onPress={toggleFlash}
-            >
-              <IconSymbol
-                name={flash ? "flashlight.on.fill" : "flashlight.off.fill"}
-                size={24}
-                color={flash ? "#ffcc00" : "#fff"}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Bottom Controls */}
-        <View style={styles.bottomControls}>
-          {/* Gallery */}
-          <TouchableOpacity
-            style={styles.sideButton}
-            onPress={selectFromGallery}
-          >
-            <View style={styles.galleryPreview}>
-              <IconSymbol name="photo" size={24} color="#666" />
-            </View>
-          </TouchableOpacity>
-
-          {/* Clean Record Button - Hold to Record */}
-          <GestureDetector gesture={pressGesture}>
-            <Animated.View
-              style={[
-                styles.recordButtonContainer,
-                { transform: [{ scale: scaleAnim }] },
-              ]}
-            >
-              {/* Progress Ring Background */}
-              <View style={styles.progressTrack} />
-
-              {/* Animated Progress Ring */}
-              <Animated.View
-                style={[
-                  styles.progressRing,
-                  {
-                    transform: [
-                      {
-                        rotate: progressAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: ["0deg", "360deg"],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              />
-
-              {/* Clean Record Button */}
-              <View
-                style={[
-                  styles.recordButton,
-                  isPressed && styles.recordButtonPressed,
-                  selectedGroup.isRevealed && styles.recordButtonDisabled,
-                ]}
-              />
-
-              {/* Hold instruction */}
-              {!isRecording && !selectedGroup.isRevealed && (
-                <ThemedText style={styles.holdText}>Hold to record</ThemedText>
-              )}
-            </Animated.View>
-          </GestureDetector>
-
-          {/* Effects */}
-          <TouchableOpacity style={styles.sideButton} onPress={openEffects}>
-            <IconSymbol name="face.smiling" size={28} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Group already submitted message */}
-        {selectedGroup.isRevealed && (
-          <View style={styles.submittedOverlay}>
-            <View style={styles.submittedCard}>
-              <IconSymbol
-                name="checkmark.circle.fill"
-                size={40}
-                color="#4CAF50"
-              />
-              <ThemedText style={styles.submittedTitle}>
-                Already Posted!
-              </ThemedText>
-              <ThemedText style={styles.submittedSubtitle}>
-                You&apos;ve already submitted to {selectedGroup.name}
-              </ThemedText>
-              <TouchableOpacity style={styles.viewGroupButton}>
-                <ThemedText style={styles.viewGroupButtonText}>
-                  View Group
-                </ThemedText>
+          {/* Bottom Controls - Centered for Ambidextrous Use */}
+          <View style={styles.bottomControls}>
+            {/* Left Side Controls */}
+            <View style={styles.leftControls}>
+              <TouchableOpacity
+                style={styles.sideButton}
+                onPress={selectFromGallery}
+              >
+                <View style={styles.galleryPreview}>
+                  <IconSymbol name="photo" size={24} color="#666" />
+                </View>
               </TouchableOpacity>
             </View>
+
+            {/* Centered Record Button - Hold to Record */}
+            <View style={styles.centerControls}>
+              <GestureDetector gesture={pressGesture}>
+                <Animated.View
+                  style={[
+                    styles.recordButtonContainer,
+                    { transform: [{ scale: scaleAnim }] },
+                  ]}
+                >
+                  {/* Enlarging Red Circle - appears when recording */}
+                  <Animated.View
+                    style={[
+                      styles.recordingCircle,
+                      {
+                        transform: [{ scale: circleScaleAnim }],
+                        opacity: circleOpacityAnim,
+                      },
+                    ]}
+                  />
+
+                  {/* Progress Ring Background */}
+                  <View style={styles.progressTrack} />
+
+                  {/* Animated Progress Ring */}
+                  <Animated.View
+                    style={[
+                      styles.progressRing,
+                      {
+                        transform: [
+                          {
+                            rotate: progressAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ["0deg", "360deg"],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+
+                  {/* Clean Record Button */}
+                  <View
+                    style={[
+                      styles.recordButton,
+                      isPressed && styles.recordButtonPressed,
+                      selectedGroup.isRevealed && styles.recordButtonDisabled,
+                    ]}
+                  />
+
+                  {/* Hold instruction */}
+                  {!isRecording && !selectedGroup.isRevealed && (
+                    <ThemedText style={styles.holdText}>
+                      {isCameraReady ? "Hold to record" : "Camera loading..."}
+                    </ThemedText>
+                  )}
+                </Animated.View>
+              </GestureDetector>
+            </View>
+
+            {/* Right Side Controls - Camera & Flash */}
+            <View style={styles.rightControls}>
+              <View style={styles.rightButtonsContainer}>
+                {/* Camera Flip */}
+                <TouchableOpacity
+                  style={styles.sideButton}
+                  onPress={switchCamera}
+                >
+                  <IconSymbol
+                    name="arrow.triangle.2.circlepath.camera"
+                    size={20}
+                    color="#fff"
+                  />
+                </TouchableOpacity>
+
+                {/* Flashlight */}
+                <TouchableOpacity
+                  style={styles.sideButton}
+                  onPress={toggleFlash}
+                >
+                  <IconSymbol
+                    name={flash ? "flashlight.on.fill" : "flashlight.off.fill"}
+                    size={20}
+                    color={flash ? "#ffcc00" : "#fff"}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        )}
+
+          {/* Group already submitted message */}
+          {selectedGroup.isRevealed && (
+            <View style={styles.submittedOverlay}>
+              <View style={styles.submittedCard}>
+                <IconSymbol
+                  name="checkmark.circle.fill"
+                  size={40}
+                  color="#4CAF50"
+                />
+                <ThemedText style={styles.submittedTitle}>
+                  Already Posted!
+                </ThemedText>
+                <ThemedText style={styles.submittedSubtitle}>
+                  You&apos;ve already submitted to {selectedGroup.name}
+                </ThemedText>
+                <TouchableOpacity style={styles.viewGroupButton}>
+                  <ThemedText style={styles.viewGroupButtonText}>
+                    View Group
+                  </ThemedText>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* Group Selector Modal */}
         <Modal
@@ -556,57 +653,150 @@ export default function RecordScreen() {
           presentationStyle="pageSheet"
         >
           <ThemedView style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => setShowGroupSelector(false)}>
-                <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
-              </TouchableOpacity>
-              <ThemedText style={styles.modalTitle}>Choose Group</ThemedText>
-              <View style={styles.placeholder} />
+            {/* BeReal Style Modal Header */}
+            <View style={styles.berealModalHeader}>
+              <View style={styles.berealPullHandle} />
+              <View style={styles.berealHeaderContent}>
+                <TouchableOpacity
+                  onPress={() => setShowGroupSelector(false)}
+                  style={styles.berealCloseButton}
+                >
+                  <IconSymbol name="xmark" size={18} color="#000" />
+                </TouchableOpacity>
+                <View style={styles.berealTitleSection}>
+                  <ThemedText style={styles.berealModalTitle}>
+                    Choose your Group
+                  </ThemedText>
+                </View>
+              </View>
             </View>
 
-            <ScrollView style={styles.groupList}>
-              {mockGroups.map((group) => (
-                <TouchableOpacity
-                  key={group.id}
-                  style={[
-                    styles.groupOption,
-                    selectedGroupId === group.id && styles.selectedGroupOption,
-                  ]}
-                  onPress={() => {
-                    setSelectedGroupId(group.id);
-                    setShowGroupSelector(false);
-                  }}
-                >
-                  <View style={styles.groupOptionContent}>
-                    <ThemedText style={styles.groupOptionName}>
-                      {group.name}
-                    </ThemedText>
-                    <ThemedText style={styles.groupOptionPrompt}>
-                      &quot;{group.prompt}&quot;
-                    </ThemedText>
-                    <View style={styles.groupOptionStats}>
-                      <ThemedText style={styles.groupOptionStatsText}>
-                        {group.videosSubmitted}/{group.totalMembers} posted •{" "}
-                        {group.dueDate}
-                      </ThemedText>
-                      {group.isRevealed && (
-                        <View style={styles.completedBadge}>
-                          <ThemedText style={styles.completedBadgeText}>
-                            ✓ Complete
-                          </ThemedText>
+            <ScrollView
+              style={styles.groupList}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.groupListContent}
+            >
+              {mockGroups.map((group, index) => {
+                const isSelected = selectedGroupId === group.id;
+                const progressPercentage = Math.round(
+                  (group.videosSubmitted / group.totalMembers) * 100
+                );
+
+                return (
+                  <TouchableOpacity
+                    key={group.id}
+                    style={[
+                      styles.groupCard,
+                      isSelected && styles.selectedGroupCard,
+                      index === 0 && styles.firstGroupCard,
+                    ]}
+                    onPress={() => {
+                      setSelectedGroupId(group.id);
+                      setShowGroupSelector(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    {/* Card Header */}
+                    <View style={styles.groupCardHeader}>
+                      <View style={styles.groupNameContainer}>
+                        <ThemedText style={styles.groupCardName}>
+                          {group.name}
+                        </ThemedText>
+                        {group.isRevealed && (
+                          <View style={styles.completedBadgeNew}>
+                            <IconSymbol
+                              name="checkmark.circle.fill"
+                              size={16}
+                              color="#4CAF50"
+                            />
+                            <ThemedText style={styles.completedBadgeTextNew}>
+                              Complete
+                            </ThemedText>
+                          </View>
+                        )}
+                      </View>
+                      {isSelected && (
+                        <View style={styles.selectedIndicator}>
+                          <IconSymbol
+                            name="checkmark.circle.fill"
+                            size={24}
+                            color="#007AFF"
+                          />
                         </View>
                       )}
                     </View>
-                  </View>
-                  {selectedGroupId === group.id && (
-                    <IconSymbol
-                      name="checkmark.circle.fill"
-                      size={24}
-                      color="#fff"
-                    />
-                  )}
-                </TouchableOpacity>
-              ))}
+
+                    {/* Prompt */}
+                    <View style={styles.promptSection}>
+                      <ThemedText style={styles.groupCardPrompt}>
+                        &quot;{group.prompt}&quot;
+                      </ThemedText>
+                    </View>
+
+                    {/* Progress Section */}
+                    <View style={styles.progressSection}>
+                      <View style={styles.progressInfo}>
+                        <ThemedText style={styles.progressText}>
+                          {group.videosSubmitted}/{group.totalMembers} posted
+                        </ThemedText>
+                        <ThemedText style={styles.dueDateText}>
+                          {group.dueDate}
+                        </ThemedText>
+                      </View>
+
+                      {/* Progress Bar */}
+                      <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBarBackground}>
+                          <View
+                            style={[
+                              styles.progressBarFill,
+                              {
+                                width: `${progressPercentage}%`,
+                                backgroundColor: group.isRevealed
+                                  ? "#4CAF50"
+                                  : "#007AFF",
+                              },
+                            ]}
+                          />
+                        </View>
+                        <ThemedText style={styles.progressPercentage}>
+                          {progressPercentage}%
+                        </ThemedText>
+                      </View>
+                    </View>
+
+                    {/* Member Avatars Placeholder */}
+                    <View style={styles.membersSection}>
+                      <View style={styles.memberAvatars}>
+                        {group.members
+                          .slice(0, 4)
+                          .map((member, memberIndex) => (
+                            <View
+                              key={memberIndex}
+                              style={[
+                                styles.memberAvatar,
+                                { marginLeft: memberIndex > 0 ? -8 : 0 },
+                              ]}
+                            >
+                              <ThemedText style={styles.memberInitial}>
+                                {member.charAt(0)}
+                              </ThemedText>
+                            </View>
+                          ))}
+                        {group.members.length > 4 && (
+                          <View
+                            style={[styles.memberAvatar, { marginLeft: -8 }]}
+                          >
+                            <ThemedText style={styles.memberInitial}>
+                              +{group.members.length - 4}
+                            </ThemedText>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
           </ThemedView>
         </Modal>
@@ -618,16 +808,22 @@ export default function RecordScreen() {
           presentationStyle="fullScreen"
         >
           <ThemedView style={styles.previewContainer}>
-            {/* Preview Header */}
-            <View style={styles.previewHeader}>
+            {/* BeReal Style Preview Header */}
+            <View style={styles.berealPreviewHeader}>
               <TouchableOpacity
                 onPress={closeVideoPreview}
-                style={styles.closeButton}
+                style={styles.berealPreviewClose}
               >
-                <IconSymbol name="xmark" size={24} color="#fff" />
+                <IconSymbol name="xmark" size={20} color="#fff" />
               </TouchableOpacity>
-              <ThemedText style={styles.previewTitle}>Preview</ThemedText>
-              <View style={styles.placeholder} />
+              <View style={styles.berealPreviewTitleContainer}>
+                <ThemedText style={styles.berealPreviewTitle}>
+                  Preview
+                </ThemedText>
+              </View>
+              <TouchableOpacity style={styles.berealPreviewAction}>
+                <IconSymbol name="square.and.arrow.up" size={20} color="#fff" />
+              </TouchableOpacity>
             </View>
 
             {/* Video Player */}
@@ -705,12 +901,21 @@ export default function RecordScreen() {
           presentationStyle="pageSheet"
         >
           <ThemedView style={styles.settingsContainer}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={closeSettings}>
-                <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
-              </TouchableOpacity>
-              <ThemedText style={styles.modalTitle}>Camera Settings</ThemedText>
-              <View style={styles.placeholder} />
+            <View style={styles.berealModalHeader}>
+              <View style={styles.berealPullHandle} />
+              <View style={styles.berealHeaderContent}>
+                <TouchableOpacity
+                  onPress={closeSettings}
+                  style={styles.berealCloseButton}
+                >
+                  <IconSymbol name="xmark" size={18} color="#000" />
+                </TouchableOpacity>
+                <View style={styles.berealTitleSection}>
+                  <ThemedText style={styles.berealModalTitle}>
+                    Settings
+                  </ThemedText>
+                </View>
+              </View>
             </View>
 
             <ScrollView style={styles.settingsList}>
@@ -783,109 +988,7 @@ export default function RecordScreen() {
             </ScrollView>
           </ThemedView>
         </Modal>
-
-        {/* Effects Modal */}
-        <Modal
-          visible={showEffects}
-          animationType="slide"
-          presentationStyle="pageSheet"
-        >
-          <ThemedView style={styles.effectsContainer}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={closeEffects}>
-                <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
-              </TouchableOpacity>
-              <ThemedText style={styles.modalTitle}>
-                Effects & Filters
-              </ThemedText>
-              <View style={styles.placeholder} />
-            </View>
-
-            <ScrollView style={styles.effectsList}>
-              <View style={styles.effectSection}>
-                <ThemedText style={styles.effectSectionTitle}>
-                  🎭 Filters
-                </ThemedText>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.filterScroll}
-                >
-                  {["Original", "Vintage", "B&W", "Warm", "Cool", "Bright"].map(
-                    (filter, index) => (
-                      <TouchableOpacity key={index} style={styles.filterItem}>
-                        <View style={styles.filterPreview}>
-                          <ThemedText style={styles.filterEmoji}>
-                            {index === 0
-                              ? "📷"
-                              : index === 1
-                              ? "📸"
-                              : index === 2
-                              ? "⚫"
-                              : index === 3
-                              ? "🟠"
-                              : index === 4
-                              ? "🔵"
-                              : "☀️"}
-                          </ThemedText>
-                        </View>
-                        <ThemedText style={styles.filterName}>
-                          {filter}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    )
-                  )}
-                </ScrollView>
-              </View>
-
-              <View style={styles.effectSection}>
-                <ThemedText style={styles.effectSectionTitle}>
-                  ✨ Effects
-                </ThemedText>
-                <View style={styles.effectGrid}>
-                  {[
-                    {
-                      name: "Sparkles",
-                      emoji: "✨",
-                      desc: "Add magical sparkles",
-                    },
-                    { name: "Hearts", emoji: "💕", desc: "Floating hearts" },
-                    { name: "Stars", emoji: "⭐", desc: "Twinkling stars" },
-                    { name: "Confetti", emoji: "🎉", desc: "Party confetti" },
-                  ].map((effect, index) => (
-                    <TouchableOpacity key={index} style={styles.effectItem}>
-                      <View style={styles.effectIcon}>
-                        <ThemedText style={styles.effectEmoji}>
-                          {effect.emoji}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.effectName}>
-                        {effect.name}
-                      </ThemedText>
-                      <ThemedText style={styles.effectDesc}>
-                        {effect.desc}
-                      </ThemedText>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.effectSection}>
-                <ThemedText style={styles.effectSectionTitle}>
-                  🎵 Audio
-                </ThemedText>
-                <TouchableOpacity style={styles.audioOption}>
-                  <IconSymbol name="music.note" size={20} color="#fff" />
-                  <ThemedText style={styles.audioText}>
-                    Add Background Music
-                  </ThemedText>
-                  <ThemedText style={styles.comingSoon}>Coming Soon</ThemedText>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </ThemedView>
-        </Modal>
-      </ThemedView>
+      </View>
     </GestureHandlerRootView>
   );
 }
@@ -895,6 +998,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
+  cameraContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+    overflow: "hidden",
+  },
+  fullScreenCamera: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+  fullScreenCameraPlaceholder: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#1a1a1a",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1,
+  },
+  uiOverlay: {
+    flex: 1,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 2,
+    backgroundColor: "transparent",
+  },
+  spacer: {
+    flex: 1,
+  },
   // Header
   header: {
     flexDirection: "row",
@@ -903,6 +1036,7 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 16,
+    backgroundColor: "transparent",
   },
   groupSelector: {
     flexDirection: "row",
@@ -931,6 +1065,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
     alignItems: "center",
+    backgroundColor: "transparent",
   },
   prompt: {
     fontSize: 18,
@@ -943,20 +1078,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#888",
     fontWeight: "500",
-  },
-  // Camera Preview
-  cameraPreview: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    position: "relative",
-  },
-  camera: {
-    flex: 1,
-  },
-  cameraPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
   cameraText: {
     marginTop: 12,
@@ -980,7 +1101,7 @@ const styles = StyleSheet.create({
   // Minimalist Timer
   minimalistTimer: {
     position: "absolute",
-    top: 20,
+    top: 140,
     alignSelf: "center",
     backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 12,
@@ -995,7 +1116,7 @@ const styles = StyleSheet.create({
   // Recording Dot
   recordingDot: {
     position: "absolute",
-    top: 20,
+    top: 70,
     left: 20,
     width: 12,
     height: 12,
@@ -1018,14 +1139,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // Bottom Controls
+  // Bottom Controls - Ambidextrous Layout
   bottomControls: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: 20,
     paddingVertical: 40,
-    backgroundColor: "#000",
+    backgroundColor: "transparent",
+    position: "relative",
+  },
+  leftControls: {
+    position: "absolute",
+    left: 20,
+    alignItems: "flex-start",
+  },
+  centerControls: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rightControls: {
+    position: "absolute",
+    right: 20,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  rightButtonsContainer: {
+    gap: 16,
+    alignItems: "center",
   },
   sideButton: {
     width: 50,
@@ -1050,6 +1191,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "relative",
+  },
+  recordingCircle: {
+    position: "absolute",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#ff4444",
+    opacity: 0,
   },
   progressTrack: {
     position: "absolute",
@@ -1144,27 +1293,89 @@ const styles = StyleSheet.create({
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "#fff",
   },
-  modalHeader: {
+  // BeReal Style Modal Headers
+  berealModalHeader: {
+    backgroundColor: "#fff",
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  berealPullHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#E5E5E5",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  berealHeaderContent: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 60,
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    paddingTop: 40,
+  },
+  berealCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F2F2F2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  berealTitleSection: {
+    flex: 1,
+    alignItems: "center",
+  },
+  berealModalTitle: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#000",
+    textAlign: "center",
+    letterSpacing: -0.5,
+  },
+  modalHeaderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(0, 122, 255, 0.2)",
   },
   modalCancel: {
-    fontSize: 16,
-    color: "#888",
-    fontWeight: "500",
+    fontSize: 14,
+    color: "#007AFF",
+    fontWeight: "600",
+  },
+  modalHeaderRight: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 50,
+  },
+  modalIndicator: {
+    width: 32,
+    height: 4,
+    backgroundColor: "#333",
+    borderRadius: 2,
+  },
+  modalTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 20,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "700",
     color: "#fff",
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#888",
+    fontWeight: "400",
   },
   placeholder: {
     width: 50,
@@ -1172,48 +1383,132 @@ const styles = StyleSheet.create({
   groupList: {
     flex: 1,
   },
-  groupOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
+  groupListContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 32,
   },
-  selectedGroupOption: {
+  groupCard: {
     backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
   },
-  groupOptionContent: {
+  firstGroupCard: {
+    marginTop: 8,
+  },
+  selectedGroupCard: {
+    borderColor: "#007AFF",
+    backgroundColor: "rgba(0, 122, 255, 0.1)",
+  },
+  groupCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  groupNameContainer: {
     flex: 1,
-  },
-  groupOptionName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  groupOptionPrompt: {
-    fontSize: 14,
-    color: "#ccc",
-    marginBottom: 8,
-  },
-  groupOptionStats: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  groupOptionStatsText: {
+  groupCardName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  completedBadgeNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(76, 175, 80, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  completedBadgeTextNew: {
+    fontSize: 11,
+    color: "#4CAF50",
+    fontWeight: "600",
+  },
+  selectedIndicator: {
+    marginLeft: 12,
+  },
+  promptSection: {
+    marginBottom: 16,
+  },
+  groupCardPrompt: {
+    fontSize: 16,
+    color: "#ccc",
+    fontStyle: "italic",
+    lineHeight: 22,
+  },
+  progressSection: {
+    marginBottom: 16,
+  },
+  progressInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "500",
+  },
+  dueDateText: {
+    fontSize: 14,
+    color: "#888",
+    fontWeight: "500",
+  },
+  progressBarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  progressBarBackground: {
+    flex: 1,
+    height: 6,
+    backgroundColor: "#333",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  progressPercentage: {
     fontSize: 12,
     color: "#888",
+    fontWeight: "600",
+    minWidth: 35,
+    textAlign: "right",
   },
-  completedBadge: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  membersSection: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  completedBadgeText: {
-    fontSize: 10,
+  memberAvatars: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  memberAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#1a1a1a",
+  },
+  memberInitial: {
+    fontSize: 12,
     color: "#fff",
     fontWeight: "600",
   },
@@ -1225,23 +1520,54 @@ const styles = StyleSheet.create({
   previewHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingTop: 60,
     paddingHorizontal: 20,
-    paddingBottom: 20,
+    paddingBottom: 24,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    backdropFilter: "blur(20px)",
   },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    justifyContent: "center",
+  previewHeaderButton: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  previewBackText: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "600",
+  },
+  previewTitleContainer: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 20,
   },
   previewTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#fff",
+    marginBottom: 2,
+  },
+  previewSubtitle: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.7)",
+    fontWeight: "500",
+  },
+  previewHeaderAction: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   videoContainer: {
     flex: 1,
@@ -1363,100 +1689,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     flex: 1,
   },
-  // Effects Modal Styles
-  effectsContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  effectsList: {
-    flex: 1,
-  },
-  effectSection: {
+
+  // BeReal Preview Header Styles
+  berealPreviewHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 60,
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingBottom: 20,
+    backgroundColor: "#000", // BeReal style: black background
   },
-  effectSectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 16,
-  },
-  filterScroll: {
-    paddingVertical: 8,
-  },
-  filterItem: {
-    alignItems: "center",
-    marginRight: 16,
-    width: 60,
-  },
-  filterPreview: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#1a1a1a",
+  berealPreviewClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#333", // Dark gray button
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 8,
   },
-  filterEmoji: {
-    fontSize: 20,
-  },
-  filterName: {
-    fontSize: 12,
-    color: "#ccc",
-    textAlign: "center",
-  },
-  effectGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 16,
-  },
-  effectItem: {
-    width: "45%",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-  },
-  effectIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#333",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  effectEmoji: {
-    fontSize: 20,
-  },
-  effectName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 4,
-  },
-  effectDesc: {
-    fontSize: 12,
-    color: "#888",
-    textAlign: "center",
-  },
-  audioOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    gap: 12,
-  },
-  audioText: {
-    fontSize: 16,
-    color: "#fff",
+  berealPreviewTitleContainer: {
     flex: 1,
+    alignItems: "center",
   },
-  comingSoon: {
-    fontSize: 12,
-    color: "#666",
-    fontStyle: "italic",
+  berealPreviewTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff", // White text
+  },
+  berealPreviewAction: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#333", // Dark gray button
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
