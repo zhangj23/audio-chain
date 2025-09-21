@@ -1,22 +1,23 @@
-import { useState } from 'react';
-import { StyleSheet, TextInput, View, TouchableOpacity } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { useState } from "react";
+import { StyleSheet, TextInput, View, TouchableOpacity } from "react-native";
+import { Link, useRouter } from "expo-router";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
 
 export default function SignupScreen() {
   const router = useRouter();
-  const SKIP_AUTH = String(process.env.EXPO_PUBLIC_SKIP_AUTH || '').toLowerCase() === 'true';
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const SKIP_AUTH =
+    String(process.env.EXPO_PUBLIC_SKIP_AUTH || "").toLowerCase() === "true";
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
   const onSignup = () => {
     if (SKIP_AUTH) {
-      router.replace('/(tabs)');
+      router.replace("/(tabs)");
       return;
     }
-    console.log('Signup pressed', { username, password });
+    console.log("Signup pressed", { username, password });
   };
 
   return (
@@ -44,7 +45,9 @@ export default function SignupScreen() {
         />
 
         <TouchableOpacity style={styles.button} onPress={onSignup}>
-          <ThemedText type="defaultSemiBold" style={styles.buttonText}>Sign Up</ThemedText>
+          <ThemedText type="defaultSemiBold" style={styles.buttonText}>
+            Sign Up
+          </ThemedText>
         </TouchableOpacity>
       </View>
 
@@ -61,38 +64,36 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     padding: 24,
     gap: 24,
   },
   form: {
-    width: '100%',
+    width: "100%",
     gap: 12,
   },
   input: {
     height: 48,
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: "#ccc",
     borderRadius: 10,
     paddingHorizontal: 12,
-    backgroundColor: 'white',
+    backgroundColor: "white",
   },
   button: {
     height: 48,
-    backgroundColor: '#2563eb',
+    backgroundColor: "#2563eb",
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: 8,
   },
   buttonText: {
-    color: 'white',
+    color: "white",
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
 });
-
-
