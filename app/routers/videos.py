@@ -48,6 +48,24 @@ async def upload_video(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # Add logging for debugging
+    print(f"Video upload request: group_id={group_id}, prompt_id={prompt_id}, duration={duration}, user_id={current_user.id}")
+    print(f"File info: filename={file.filename}, content_type={file.content_type}, size={file.size}")
+    
+    # Validate duration
+    if duration <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Duration must be greater than 0"
+        )
+    
+    # Validate file
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="No file provided"
+        )
+    
     # Check if user is a member of the group
     membership = db.query(GroupMember).filter(
         GroupMember.user_id == current_user.id,
@@ -80,6 +98,7 @@ async def upload_video(
     ).first()
     
     if existing_submission:
+        print(f"Duplicate submission detected: user_id={current_user.id}, group_id={group_id}, prompt_id={prompt_id}")
         raise HTTPException(
             status_code=400,
             detail="You have already submitted a video for this prompt"
@@ -140,7 +159,27 @@ async def get_group_submissions(
         VideoSubmission.group_id == group_id
     ).all()
     
-    return submissions
+    # Add user information to each submission
+    result = []
+    for submission in submissions:
+        user = db.query(User).filter(User.id == submission.user_id).first()
+        submission_dict = {
+            "id": submission.id,
+            "user_id": submission.user_id,
+            "group_id": submission.group_id,
+            "prompt_id": submission.prompt_id,
+            "s3_key": submission.s3_key,
+            "duration": submission.duration,
+            "submitted_at": submission.submitted_at,
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email
+            } if user else None
+        }
+        result.append(submission_dict)
+    
+    return result
 
 @router.get("/compilations/{group_id}")
 async def get_group_compilations(

@@ -15,6 +15,7 @@ class VideoSubmissionResponse(VideoSubmissionBase):
     user_id: int
     s3_key: str
     submitted_at: datetime
+    user: Optional[dict] = None  # Will include user info
 
     class Config:
         from_attributes = True

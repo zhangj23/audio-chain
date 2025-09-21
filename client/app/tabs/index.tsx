@@ -18,6 +18,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { GroupDetail } from "@/components/group-detail";
 import { CreateGroupModal } from "@/components/create-group-modal";
 import { InvitesModal } from "@/components/invites-modal";
+import { NotificationsModal } from "@/components/notifications-modal";
 import { useGroups } from "@/contexts/GroupsContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiService, GroupInvite } from "@/services/api";
@@ -29,6 +30,7 @@ export default function HomeScreen() {
   const [selectedGroup, setSelectedGroup] = useState<any>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showInvitesModal, setShowInvitesModal] = useState(false);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [submittedVideos] = useState<{
     [groupId: string]: any;
@@ -41,8 +43,12 @@ export default function HomeScreen() {
   const LAST_OPENED_STORAGE_KEY = "weave_groups_last_opened";
   const SUBMISSIONS_KEY = "weave_prev_submission_counts";
   const DEADLINE_NOTIFS_KEY = "weave_deadline_notifs";
+  const SEEN_NOTIFICATIONS_KEY = "weave_seen_notifications";
   const [prevSubmissionCounts, setPrevSubmissionCounts] = useState<Record<number, number>>({});
   const [scheduledDeadlines, setScheduledDeadlines] = useState<Record<number, number>>({});
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [seenNotifications, setSeenNotifications] = useState<Set<string>>(new Set());
+  const [isGeneratingNotifications, setIsGeneratingNotifications] = useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -66,6 +72,9 @@ export default function HomeScreen() {
 
       console.log("Valid invites after filtering:", validInvites);
       setPendingInvites(validInvites);
+      
+      // Generate notifications from invites
+      await generateNotifications(validInvites);
     } catch (error) {
       console.error("Failed to fetch pending invites:", error);
       setPendingInvites([]);
@@ -74,13 +83,170 @@ export default function HomeScreen() {
     }
   };
 
+  const generateNotifications = async (invites: GroupInvite[]) => {
+    if (isGeneratingNotifications) return; // Prevent concurrent execution
+    
+    setIsGeneratingNotifications(true);
+    const notificationList: any[] = [];
+    
+    try {
+    
+    // Add invite notifications (only if not already seen)
+    invites.forEach((invite) => {
+      const notificationId = `invite-${invite.id}`;
+      if (!seenNotifications.has(notificationId)) {
+        notificationList.push({
+          id: notificationId,
+          type: "invite",
+          title: "Group Invitation",
+          message: `${invite.invited_by_user?.username || "Someone"} invited you to join "${invite.group?.name || "a group"}"`,
+          timestamp: invite.created_at,
+          groupName: invite.group?.name,
+          userName: invite.invited_by_user?.username,
+          groupId: invite.group_id,
+          isRead: false,
+        });
+      }
+    });
+
+    // Add submission notifications - check actual submission data
+    for (const group of groups) {
+      if (group.videoStats && group.videoStats.total_submissions > 0) {
+        try {
+          // Fetch actual submissions for this group
+          const submissions = await apiService.getGroupSubmissions(group.id);
+          
+          // Filter out submissions from the current user
+          const otherUserSubmissions = submissions.filter((submission: any) => 
+            submission.user_id !== user?.id
+          );
+          
+          // Only create notification if there are submissions from other users
+          if (otherUserSubmissions.length > 0) {
+            // Get the most recent submission from other users
+            const latestSubmission = otherUserSubmissions.sort((a: any, b: any) => 
+              new Date(b.submitted_at || b.created_at).getTime() - new Date(a.submitted_at || a.created_at).getTime()
+            )[0];
+            
+            const notificationId = `submission-${group.id}-${latestSubmission.id}`;
+            
+            // Only add if not already seen
+            if (!seenNotifications.has(notificationId)) {
+              // Get username from submission data (now includes user info from backend)
+              const username = latestSubmission.user?.username || "Someone";
+              
+              notificationList.push({
+                id: notificationId,
+                type: "submission",
+                title: "New Video Posted",
+                message: `${username} posted a video in "${group.name}"`,
+                timestamp: latestSubmission.submitted_at || latestSubmission.created_at,
+                groupName: group.name,
+                groupId: group.id,
+                userName: username,
+                isRead: false,
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to fetch submissions for group ${group.id}:`, error);
+        }
+      }
+    }
+
+    // Add deadline notifications (only if not already seen)
+    groups.forEach((group) => {
+      if (group.deadline_at) {
+        const deadline = new Date(group.deadline_at);
+        const now = new Date();
+        const hoursUntilDeadline = (deadline.getTime() - now.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursUntilDeadline > 0 && hoursUntilDeadline <= 24) {
+          const notificationId = `deadline-${group.id}`;
+          if (!seenNotifications.has(notificationId)) {
+            notificationList.push({
+              id: notificationId,
+              type: "deadline",
+              title: "Deadline Reminder",
+              message: `"${group.name}" deadline is ${Math.round(hoursUntilDeadline)} hours away`,
+              timestamp: new Date().toISOString(),
+              groupName: group.name,
+              groupId: group.id,
+              isRead: false,
+            });
+          }
+        }
+      }
+    });
+
+    // Remove duplicates based on ID
+    const uniqueNotifications = notificationList.filter((notification, index, self) => 
+      index === self.findIndex(n => n.id === notification.id)
+    );
+    
+    // Sort by timestamp (newest first)
+    uniqueNotifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    
+    setNotifications(uniqueNotifications);
+    } catch (error) {
+      console.error("Error generating notifications:", error);
+    } finally {
+      setIsGeneratingNotifications(false);
+    }
+  };
+
+  const markNotificationAsRead = (notificationId: string) => {
+    setNotifications(prev => 
+      prev.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, isRead: true }
+          : notification
+      )
+    );
+    
+    // Mark as seen in persistent storage
+    const newSeenNotifications = new Set(seenNotifications);
+    newSeenNotifications.add(notificationId);
+    setSeenNotifications(newSeenNotifications);
+    saveSeenNotifications(newSeenNotifications);
+  };
+
+  const handleNotificationPress = (notification: any) => {
+    // Mark notification as seen
+    const newSeenNotifications = new Set(seenNotifications);
+    newSeenNotifications.add(notification.id);
+    setSeenNotifications(newSeenNotifications);
+    saveSeenNotifications(newSeenNotifications);
+    
+    // Close the notifications modal
+    setShowNotificationsModal(false);
+    
+    // Find the group by ID
+    const group = groups.find(g => g.id === notification.groupId);
+    if (group) {
+      // Navigate to the group detail
+      handleGroupPress(group);
+    }
+  };
+
   // Fetch invites on component mount
   React.useEffect(() => {
-    fetchPendingInvites();
-    loadLastOpened();
-    loadPrevSubmissionCounts();
-    loadScheduledDeadlines();
+    const initializeData = async () => {
+      await loadSeenNotifications();
+      await loadLastOpened();
+      await loadPrevSubmissionCounts();
+      await loadScheduledDeadlines();
+      await fetchPendingInvites();
+    };
+    initializeData();
   }, []);
+
+  // Regenerate notifications when groups or invites change
+  React.useEffect(() => {
+    if (groups.length > 0 && seenNotifications.size >= 0) {
+      generateNotifications(pendingInvites);
+    }
+  }, [groups, pendingInvites, seenNotifications]);
 
   const loadPrevSubmissionCounts = async () => {
     try {
@@ -101,6 +267,27 @@ export default function HomeScreen() {
       const raw = await AsyncStorage.getItem(DEADLINE_NOTIFS_KEY);
       if (raw) setScheduledDeadlines(JSON.parse(raw) || {});
     } catch {}
+  };
+
+  const loadSeenNotifications = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(SEEN_NOTIFICATIONS_KEY);
+      if (raw) {
+        const seenArray = JSON.parse(raw) || [];
+        setSeenNotifications(new Set(seenArray));
+      }
+    } catch (error) {
+      console.error("Failed to load seen notifications:", error);
+    }
+  };
+
+  const saveSeenNotifications = async (seenSet: Set<string>) => {
+    try {
+      const seenArray = Array.from(seenSet);
+      await AsyncStorage.setItem(SEEN_NOTIFICATIONS_KEY, JSON.stringify(seenArray));
+    } catch (error) {
+      console.error("Failed to save seen notifications:", error);
+    }
   };
 
   const saveScheduledDeadlines = async (data: Record<number, number>) => {
@@ -178,7 +365,7 @@ export default function HomeScreen() {
   React.useEffect(() => {
     let isMounted = true;
     const poll = async () => {
-      if (!user || !groups || groups.length === 0) return;
+      if (!user || !groups || groups.length === 0 || seenNotifications.size < 0) return;
       const map: Record<number, number> = { ...prevSubmissionCounts };
       for (const g of groups) {
         try {
@@ -186,15 +373,35 @@ export default function HomeScreen() {
           const othersCount = subs.filter((s: any) => s.user_id !== user.id).length;
           const prev = map[g.id] || 0;
           if (othersCount > prev) {
-            try {
-              await Notifications.scheduleNotificationAsync({
-                content: {
-                  title: "New video posted",
-                  body: `${othersCount - prev} new video(s) in ${g.name}`,
-                },
-                trigger: null,
-              });
-            } catch {}
+            // Check if we've already seen notifications for recent submissions
+            const recentSubmissions = subs.filter((s: any) => s.user_id !== user.id)
+              .sort((a: any, b: any) => new Date(b.submitted_at || b.created_at).getTime() - new Date(a.submitted_at || a.created_at).getTime())
+              .slice(0, othersCount - prev);
+            
+            // Only send system notification if we haven't seen these specific submissions
+            const unseenSubmissions = recentSubmissions.filter((sub: any) => 
+              !seenNotifications.has(`submission-${g.id}-${sub.id}`)
+            );
+            
+            if (unseenSubmissions.length > 0) {
+              try {
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: "New video posted",
+                    body: `${unseenSubmissions.length} new video(s) in ${g.name}`,
+                  },
+                  trigger: null,
+                });
+                
+                // Mark these submissions as seen to prevent duplicate notifications
+                const newSeenNotifications = new Set(seenNotifications);
+                unseenSubmissions.forEach((sub: any) => {
+                  newSeenNotifications.add(`submission-${g.id}-${sub.id}`);
+                });
+                setSeenNotifications(newSeenNotifications);
+                saveSeenNotifications(newSeenNotifications);
+              } catch {}
+            }
           }
           map[g.id] = othersCount;
         } catch {}
@@ -202,33 +409,39 @@ export default function HomeScreen() {
       if (isMounted) await savePrevSubmissionCounts(map);
     };
 
-    poll();
-    const id = setInterval(poll, 120000);
-    return () => {
-      isMounted = false;
-      clearInterval(id);
-    };
+    // Only start polling after seenNotifications is loaded
+    if (seenNotifications.size >= 0) {
+      poll();
+      const id = setInterval(poll, 120000);
+      return () => {
+        isMounted = false;
+        clearInterval(id);
+      };
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, user]);
+  }, [groups, user, seenNotifications]);
 
   // Schedule deadline reminders (1 hour before deadline)
   React.useEffect(() => {
     const schedule = async () => {
-      if (!groups || groups.length === 0) return;
+      if (!groups || groups.length === 0 || seenNotifications.size < 0) return;
       const now = Date.now();
       const updated: Record<number, number> = { ...scheduledDeadlines };
       for (const g of groups) {
         if (!g.deadline_at) continue;
         const deadlineMs = new Date(g.deadline_at).getTime();
         const triggerMs = deadlineMs - 60 * 60 * 1000;
-        if (triggerMs > now && updated[g.id] !== triggerMs) {
+        const notificationId = `deadline-${g.id}`;
+        
+        // Only schedule if not already scheduled and not already seen
+        if (triggerMs > now && updated[g.id] !== triggerMs && !seenNotifications.has(notificationId)) {
           try {
             await Notifications.scheduleNotificationAsync({
               content: {
                 title: "Reminder to post",
                 body: `Don't forget to post in ${g.name} before the deadline!`,
               },
-              trigger: new Date(triggerMs),
+              trigger: null,
             });
             updated[g.id] = triggerMs;
           } catch {}
@@ -237,9 +450,12 @@ export default function HomeScreen() {
       await saveScheduledDeadlines(updated);
     };
 
-    schedule();
+    // Only schedule after seenNotifications is loaded
+    if (seenNotifications.size >= 0) {
+      schedule();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups]);
+  }, [groups, seenNotifications]);
 
   if (isLoading) {
     return (
@@ -275,9 +491,16 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setShowInvitesModal(true)}
+            onPress={() => setShowNotificationsModal(true)}
           >
             <IconSymbol name="bell" size={20} color="#007AFF" />
+            {notifications.filter(n => !n.isRead).length > 0 && (
+              <View style={styles.notificationBadge}>
+                <ThemedText style={styles.notificationBadgeText}>
+                  {notifications.filter(n => !n.isRead).length}
+                </ThemedText>
+              </View>
+            )}
           </TouchableOpacity>
           <ThemedText style={styles.title}>Weave</ThemedText>
           <TouchableOpacity
@@ -288,19 +511,21 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Invites Notification */}
-        {pendingInvites && pendingInvites.length > 0 && (
+        {/* Notifications Banner */}
+        {notifications.filter(n => !n.isRead).length > 0 && (
           <View style={styles.invitesNotification}>
             <View style={styles.invitesContent}>
               <View style={styles.invitesInfo}>
                 <IconSymbol name="bell" size={20} color="#007AFF" />
-                <ThemedText style={styles.invitesText}>Notifications</ThemedText>
+                <ThemedText style={styles.invitesText}>
+                  {notifications.filter(n => !n.isRead).length} new notification{notifications.filter(n => !n.isRead).length !== 1 ? 's' : ''}
+                </ThemedText>
               </View>
               <TouchableOpacity
                 style={styles.viewInvitesButton}
-                onPress={() => setShowInvitesModal(true)}
+                onPress={() => setShowNotificationsModal(true)}
               >
-                <ThemedText style={styles.viewInvitesButtonText}>Notifications</ThemedText>
+                <ThemedText style={styles.viewInvitesButtonText}>View All</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -421,6 +646,15 @@ export default function HomeScreen() {
           refreshGroups();
         }}
       />
+
+      {/* Notifications Modal */}
+      <NotificationsModal
+        visible={showNotificationsModal}
+        onClose={() => setShowNotificationsModal(false)}
+        notifications={notifications}
+        onMarkAsRead={markNotificationAsRead}
+        onNotificationPress={handleNotificationPress}
+      />
     </ThemedView>
   );
 }
@@ -500,6 +734,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#FF3B30",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  notificationBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   groupsList: {
     paddingHorizontal: 20,

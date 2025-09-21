@@ -91,15 +91,31 @@ export function GroupDetail({
   const [compilations, setCompilations] = useState<any[]>([]);
   const [isPolling, setIsPolling] = useState(false);
   const [isLoadingCompilations, setIsLoadingCompilations] = useState(false);
+  const [currentUserSubmissions, setCurrentUserSubmissions] = useState(userSubmissions);
+  const [isPollingSubmissions, setIsPollingSubmissions] = useState(false);
+  const submissionPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const videoRef = useRef<Video>(null);
 
   // Note: For now, we only track invited users within the current session
   // In a full implementation, you'd want to fetch existing pending invites
   // when the component loads to show users who were already invited
 
+  // Initialize current submissions state when userSubmissions prop changes
+  useEffect(() => {
+    setCurrentUserSubmissions(userSubmissions);
+  }, [userSubmissions]);
+
   // Fetch compilations on component mount
   useEffect(() => {
     fetchCompilations();
+  }, [group.id]);
+
+  // Start polling for submission updates when component mounts
+  useEffect(() => {
+    startSubmissionPolling();
+    return () => {
+      stopSubmissionPolling();
+    };
   }, [group.id]);
 
   // Poll for compilation status when a compilation is in progress
@@ -128,6 +144,50 @@ export function GroupDetail({
     } finally {
       setIsLoadingCompilations(false);
     }
+  };
+
+  const fetchSubmissionUpdates = async () => {
+    try {
+      const submissions = await apiService.getGroupSubmissions(group.id);
+      console.log("Fetched submission updates:", submissions);
+      
+      // Check if there are new submissions
+      const currentCount = currentUserSubmissions.length;
+      const newCount = submissions.length;
+      
+      if (newCount > currentCount) {
+        console.log(`New submissions detected: ${newCount - currentCount} new submissions`);
+        setCurrentUserSubmissions(submissions);
+        
+        // Trigger refresh if onRefresh callback is available
+        if (onRefresh) {
+          onRefresh();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch submission updates:", error);
+    }
+  };
+
+  const startSubmissionPolling = () => {
+    if (isPollingSubmissions || submissionPollIntervalRef.current) return;
+    
+    setIsPollingSubmissions(true);
+    console.log("Starting submission polling for group:", group.id);
+    
+    // Poll every 10 seconds for submission updates
+    submissionPollIntervalRef.current = setInterval(() => {
+      fetchSubmissionUpdates();
+    }, 10000);
+  };
+
+  const stopSubmissionPolling = () => {
+    setIsPollingSubmissions(false);
+    if (submissionPollIntervalRef.current) {
+      clearInterval(submissionPollIntervalRef.current);
+      submissionPollIntervalRef.current = null;
+    }
+    console.log("Stopping submission polling for group:", group.id);
   };
 
   const pollCompilationStatus = async (compilationId: number) => {
@@ -351,6 +411,21 @@ export function GroupDetail({
     };
   };
 
+  const getMemberUserId = (member: any): number | undefined => {
+    if (typeof member !== "string" && typeof member?.user_id === "number") {
+      return member.user_id;
+    }
+    if (typeof member === "string" && member === "You" && currentUserId) {
+      return currentUserId;
+    }
+    return undefined;
+  };
+
+  const hasSubmittedByUserId = (userId?: number): boolean => {
+    if (!userId) return false;
+    return currentUserSubmissions.some((s) => s.user_id === userId);
+  };
+
   const renderMemberGrid = () => {
     const { tileWidth } = getGridDimensions();
 
@@ -361,9 +436,8 @@ export function GroupDetail({
             typeof member === "string"
               ? member === "You"
               : currentUserId && member.user_id === currentUserId;
-
-          // Check if this user has submitted a video
-          const hasSubmitted = isYou && userSubmissions.length > 0;
+          const memberUserId = getMemberUserId(member);
+          const hasSubmitted = hasSubmittedByUserId(memberUserId);
 
           // If weaved, no individual videos can be viewed
           const userHasSubmittedVideo = isYou && submittedVideo;
@@ -441,8 +515,7 @@ export function GroupDetail({
                   ) : (
                     <View style={styles.emptyVideo}>
                       {isYou ? (
-                        // Check if user has submitted a video
-                        userSubmissions.length > 0 ? (
+                        hasSubmitted ? (
                           <>
                             <IconSymbol
                               name="checkmark.circle.fill"
@@ -516,12 +589,20 @@ export function GroupDetail({
             </View>
           </View>
 
-          <TouchableOpacity
-            style={styles.berealMoreButton}
-            onPress={openSettings}
-          >
-            <IconSymbol name="ellipsis" size={24} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.berealHeaderActions}>
+            <TouchableOpacity
+              style={styles.berealRefreshButton}
+              onPress={fetchSubmissionUpdates}
+            >
+              <IconSymbol name="arrow.clockwise" size={20} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.berealMoreButton}
+              onPress={openSettings}
+            >
+              <IconSymbol name="ellipsis" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -543,7 +624,7 @@ export function GroupDetail({
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <ThemedText style={styles.statNumber}>
-                  {userSubmissions?.length || 0}
+                  {currentUserSubmissions?.length || 0}
                 </ThemedText>
                 <ThemedText style={styles.statLabel}>Submitted</ThemedText>
               </View>
@@ -559,7 +640,7 @@ export function GroupDetail({
                 <ThemedText style={styles.statNumber}>
                   {group.members?.length > 0
                     ? Math.round(
-                        ((userSubmissions?.length || 0) /
+                        ((currentUserSubmissions?.length || 0) /
                           group.members.length) *
                           100
                       )
@@ -708,7 +789,7 @@ export function GroupDetail({
             <ThemedText style={styles.sectionTitle}>
               {group.isWeaved
                 ? "Weaved Video"
-                : `Videos (${userSubmissions?.length || 0}/${
+                : `Videos (${currentUserSubmissions?.length || 0}/${
                     group.members?.length || 0
                   })`}
             </ThemedText>
@@ -821,7 +902,8 @@ export function GroupDetail({
                   : currentUserId && member.user_id === currentUserId;
 
               // Check if this user has submitted a video
-              const hasSubmitted = isYou && userSubmissions.length > 0;
+              const memberUserId = getMemberUserId(member);
+              const hasSubmitted = hasSubmittedByUserId(memberUserId);
               const userHasSubmittedVideo = isYou && submittedVideo;
               const actuallyHasSubmitted =
                 hasSubmitted || userHasSubmittedVideo;
@@ -1176,6 +1258,19 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  berealHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  berealRefreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#333",
     justifyContent: "center",
     alignItems: "center",

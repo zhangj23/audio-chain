@@ -372,17 +372,23 @@ export default function RecordScreen() {
 
       // Use apiService to upload video with prompt_id from group's current prompt
       const promptId = selectedGroup.current_prompt?.id || 1; // Use group's prompt or default to 1
+      
+      // Ensure we have a valid duration (minimum 1 second)
+      const duration = Math.max(recordingTime, 1);
+      
       console.log(
-        "Using prompt_id:",
-        promptId,
-        "for group:",
-        selectedGroup.name
+        "Submitting video:",
+        "groupId:", selectedGroup.id,
+        "duration:", duration,
+        "recordingTime:", recordingTime,
+        "promptId:", promptId,
+        "group:", selectedGroup.name
       );
 
       await apiService.submitVideo(
         selectedGroup.id,
         videoFile,
-        recordingTime,
+        duration,
         promptId
       );
 
@@ -400,10 +406,14 @@ export default function RecordScreen() {
       closeVideoPreview();
     } catch (error) {
       console.error("Video upload failed:", error);
-      Alert.alert(
-        "Upload Failed",
-        "Failed to upload your video. Please try again."
-      );
+      
+      // Show more detailed error message
+      let errorMessage = "Failed to upload your video. Please try again.";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert("Upload Failed", errorMessage);
     }
   };
 

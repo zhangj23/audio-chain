@@ -48,10 +48,16 @@ export interface VideoSubmission {
   id: number;
   user_id: number;
   group_id: number;
+  prompt_id: number;
   s3_key: string;
   duration: number;
-  created_at: string;
-  user: User;
+  submitted_at: string;
+  created_at?: string;
+  user?: {
+    id: number;
+    username: string;
+    email: string;
+  };
 }
 
 export interface WeeklyCompilation {
@@ -444,6 +450,21 @@ class ApiService {
     duration: number,
     promptId: number = 1
   ): Promise<VideoSubmission> {
+    // Validate inputs
+    if (!videoFile) {
+      throw new Error("No video file provided");
+    }
+    
+    if (duration <= 0) {
+      throw new Error("Video duration must be greater than 0");
+    }
+    
+    if (!groupId || groupId <= 0) {
+      throw new Error("Invalid group ID");
+    }
+
+    console.log(`Submitting video: groupId=${groupId}, duration=${duration}, promptId=${promptId}, fileSize=${videoFile.size}`);
+
     // Upload video directly to backend
     const formData = new FormData();
     formData.append("file", videoFile); // Changed from "video" to "file" to match backend
