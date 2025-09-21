@@ -7,6 +7,7 @@ import {
   Alert,
   Image,
   TextInput,
+  Share,
 } from "react-native";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -16,7 +17,28 @@ import { useProfile } from "../../contexts/ProfileContext";
 import { videoStorage } from "../../utils/videoStorage";
 import * as ImagePicker from "expo-image-picker";
 
-const { width } = Dimensions.get("window");
+const { width, height } = Dimensions.get("window");
+
+// Dynamic tile sizing function
+const getTileWidth = () => {
+  const sectionPadding = 40; // 20px on each side
+  const tilesPerRow = 2.5; // Bigger tiles, showing 2.5 per row
+  const gapBetweenTiles = 2; // gap between tiles
+  const totalGapWidth = (tilesPerRow - 1) * gapBetweenTiles;
+  const availableWidth = width - sectionPadding;
+  return (availableWidth - totalGapWidth) / tilesPerRow;
+};
+
+const getTileFontSizes = () => {
+  const tileWidth = getTileWidth();
+  const baseFontSize = Math.max(8, Math.min(12, tileWidth * 0.08));
+  return {
+    group: Math.round(baseFontSize + 1),
+    prompt: Math.round(baseFontSize),
+    time: Math.round(baseFontSize - 1),
+    duration: Math.round(baseFontSize),
+  };
+};
 
 // Mock user data
 const userData = {
@@ -63,6 +85,34 @@ const recentActivity = [
   { id: 1, type: "video", group: "College Friends 🎓", time: "2h ago" },
   { id: 2, type: "group", group: "Work Squad 💼", time: "1d ago" },
   { id: 3, type: "video", group: "Family Fun 👨‍👩‍👧‍👦", time: "3d ago" },
+];
+
+// Mock favorited weaves
+const favoritedWeaves = [
+  {
+    id: 1,
+    groupName: "College Friends 🎓",
+    prompt: "Show us your vibe right now! ✨",
+    thumbnail: null,
+    createdAt: "2 days ago",
+    duration: "12s",
+  },
+  {
+    id: 2,
+    groupName: "Family Fun 👨‍👩‍👧‍👦",
+    prompt: "What's making you smile rn? 😊",
+    thumbnail: null,
+    createdAt: "1 week ago",
+    duration: "15s",
+  },
+  {
+    id: 3,
+    groupName: "Work Squad 💼",
+    prompt: "Drop your main character moment 💫",
+    thumbnail: null,
+    createdAt: "2 weeks ago",
+    duration: "8s",
+  },
 ];
 
 export default function ProfileScreen() {
@@ -163,9 +213,11 @@ export default function ProfileScreen() {
       setUserName(editedName);
       userData.name = editedName;
       userData.bio = editedBio;
+      setIsEditing(false); // Exit edit mode after saving
       Alert.alert("Profile Updated", "Your changes have been saved!");
+    } else {
+      setIsEditing(true); // Enter edit mode
     }
-    setIsEditing(!isEditing);
   };
 
   const cancelEdit = () => {
@@ -248,8 +300,24 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const shareProfie = () => {
-    Alert.alert("Share Profile", "Share your Weave profile with friends!");
+  const shareProfile = async () => {
+    try {
+      const result = await Share.share({
+        message: `Check out ${userName}'s Weave profile! 🎥✨\n\nJoin me on Weave and let's create amazing video memories together!`,
+        title: "Share Weave Profile",
+      });
+
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          console.log("Shared with activity type:", result.activityType);
+        } else {
+          console.log("Profile shared successfully");
+        }
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to share profile");
+      console.error("Share error:", error);
+    }
   };
 
   const openSettings = () => {
@@ -285,55 +353,127 @@ export default function ProfileScreen() {
     </View>
   );
 
+  const renderFavoritedWeaves = () => (
+    <View style={styles.favoritesSection}>
+      <ThemedText style={styles.sectionTitle}>Favorited Weaves</ThemedText>
+      {favoritedWeaves.length > 0 ? (
+        <View style={styles.weavesGrid}>
+          {favoritedWeaves.map((weave) => (
+            <TouchableOpacity key={weave.id} style={styles.weaveTile}>
+              <View style={styles.weaveTileContainer}>
+                <View style={styles.weaveTileThumbnail}>
+                  {weave.thumbnail ? (
+                    <Image
+                      source={{ uri: weave.thumbnail }}
+                      style={styles.weaveTileImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <IconSymbol name="video.fill" size={32} color="#666" />
+                  )}
+                  <View style={styles.weaveTileDuration}>
+                    <ThemedText style={styles.weaveTileDurationText}>
+                      {weave.duration}
+                    </ThemedText>
+                  </View>
+                  <TouchableOpacity style={styles.weaveTileFavoriteButton}>
+                    <IconSymbol name="heart.fill" size={12} color="#ff6b6b" />
+                  </TouchableOpacity>
+                  {/* Subtle timestamp overlay */}
+                  <View style={styles.weaveTileTimestamp}>
+                    <ThemedText style={styles.weaveTileTimestampText}>
+                      {weave.createdAt}
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.weaveTileInfo}>
+                  <ThemedText style={styles.weaveTileGroup} numberOfLines={1}>
+                    {weave.groupName}
+                  </ThemedText>
+                  <ThemedText style={styles.weaveTilePrompt} numberOfLines={2}>
+                    {weave.prompt}
+                  </ThemedText>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <IconSymbol name="heart" size={32} color="#666" />
+          <ThemedText style={styles.emptyStateText}>
+            No favorited weaves yet
+          </ThemedText>
+          <ThemedText style={styles.emptyStateSubtext}>
+            Tap the heart icon on weaves you love to save them here
+          </ThemedText>
+        </View>
+      )}
+    </View>
+  );
+
   const renderAchievements = () => {
     const earnedCount = userData.achievements.filter((a) => a.earned).length;
+    const earnedAchievements = userData.achievements.filter((a) => a.earned);
 
     return (
-      <View style={styles.section}>
+      <View style={styles.achievementSection}>
         <TouchableOpacity
           style={styles.achievementToggle}
           onPress={() => setShowAchievements(!showAchievements)}
         >
           <View style={styles.achievementHeader}>
-            <IconSymbol
-              name={earnedCount > 0 ? "star.fill" : "star"}
-              size={16}
-              color="#888"
-            />
+            <View style={styles.achievementBadge}>
+              <IconSymbol
+                name="star.fill"
+                size={12}
+                color={earnedCount > 0 ? "#FFD700" : "#555"}
+              />
+              <ThemedText style={styles.achievementCount}>
+                {earnedCount}
+              </ThemedText>
+            </View>
             <ThemedText style={styles.achievementToggleText}>
-              {earnedCount}/{userData.achievements.length} achievements
+              Achievements
             </ThemedText>
           </View>
           <IconSymbol
             name={showAchievements ? "chevron.up" : "chevron.down"}
-            size={14}
+            size={12}
             color="#666"
           />
         </TouchableOpacity>
 
         {showAchievements && (
-          <View style={styles.achievementsGrid}>
-            {userData.achievements.map((achievement) => (
-              <View
-                key={achievement.id}
-                style={[
-                  styles.achievementCard,
-                  achievement.earned && styles.achievementEarned,
-                ]}
-              >
-                <IconSymbol
-                  name={achievement.earned ? "star.fill" : "star"}
-                  size={20}
-                  color={achievement.earned ? "#fff" : "#666"}
-                />
-                <ThemedText style={styles.achievementTitle}>
-                  {achievement.title}
-                </ThemedText>
-                <ThemedText style={styles.achievementDesc}>
-                  {achievement.description}
-                </ThemedText>
-              </View>
-            ))}
+          <View style={styles.achievementsContainer}>
+            <View style={styles.achievementsGrid}>
+              {userData.achievements.map((achievement) => (
+                <TouchableOpacity
+                  key={achievement.id}
+                  style={[
+                    styles.achievementCard,
+                    achievement.earned && styles.achievementEarned,
+                  ]}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.achievementIcon}>
+                    <IconSymbol
+                      name={achievement.earned ? "star.fill" : "star"}
+                      size={14}
+                      color={achievement.earned ? "#FFD700" : "#555"}
+                    />
+                  </View>
+                  <View style={styles.achievementContent}>
+                    <ThemedText style={styles.achievementTitle}>
+                      {achievement.title}
+                    </ThemedText>
+                    <ThemedText style={styles.achievementDesc}>
+                      {achievement.description}
+                    </ThemedText>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         )}
       </View>
@@ -370,7 +510,7 @@ export default function ProfileScreen() {
       <View style={styles.header}>
         <ThemedText style={styles.headerTitle}>Profile</ThemedText>
         <View style={styles.headerButtons}>
-          <TouchableOpacity style={styles.headerButton} onPress={shareProfie}>
+          <TouchableOpacity style={styles.headerButton} onPress={shareProfile}>
             <IconSymbol name="square.and.arrow.up" size={20} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={openSettings}>
@@ -383,7 +523,7 @@ export default function ProfileScreen() {
         {/* Profile Section */}
         <View style={styles.profileSection}>
           <TouchableOpacity
-            onPress={changeProfilePicture}
+            onPress={() => setIsEditing(true)}
             style={styles.profilePictureContainer}
           >
             <View style={styles.profilePicture}>
@@ -398,19 +538,35 @@ export default function ProfileScreen() {
               )}
             </View>
             <View style={styles.editBadge}>
-              <IconSymbol name="camera.fill" size={12} color="#000" />
+              <IconSymbol name="pencil" size={10} color="#000" />
             </View>
           </TouchableOpacity>
+
+          {/* Profile Picture Change Button - only visible in edit mode */}
+          {isEditing && (
+            <TouchableOpacity
+              onPress={changeProfilePicture}
+              style={styles.changePhotoButton}
+            >
+              <IconSymbol name="camera.fill" size={14} color="#007AFF" />
+              <ThemedText style={styles.changePhotoText}>
+                Change Photo
+              </ThemedText>
+            </TouchableOpacity>
+          )}
 
           {isEditing ? (
             <TextInput
               style={styles.editableUserName}
               value={editedName}
               onChangeText={setEditedName}
-              placeholder="Your name"
-              placeholderTextColor="#666"
+              placeholder="Enter your name"
+              placeholderTextColor="#888"
               multiline={false}
               maxLength={50}
+              autoCapitalize="words"
+              returnKeyType="next"
+              selectionColor="#007AFF"
             />
           ) : (
             <ThemedText style={styles.userName}>{editedName}</ThemedText>
@@ -423,21 +579,23 @@ export default function ProfileScreen() {
               style={styles.editableBio}
               value={editedBio}
               onChangeText={setEditedBio}
-              placeholder="Tell us about yourself..."
-              placeholderTextColor="#666"
+              placeholder="Tell us about yourself... Share what makes you unique, your interests, or what you love about creating videos!"
+              placeholderTextColor="#888"
               multiline={true}
               maxLength={200}
               textAlignVertical="top"
+              autoCapitalize="sentences"
+              returnKeyType="done"
+              selectionColor="#007AFF"
+              scrollEnabled={true}
             />
           ) : (
-            <TouchableOpacity onPress={() => setIsEditing(true)}>
-              <ThemedText style={styles.userBio}>{editedBio}</ThemedText>
-            </TouchableOpacity>
+            <ThemedText style={styles.userBio}>{editedBio}</ThemedText>
           )}
 
           {renderStats()}
 
-          {isEditing ? (
+          {isEditing && (
             <View style={styles.editButtonsContainer}>
               <TouchableOpacity
                 style={styles.cancelButton}
@@ -451,50 +609,14 @@ export default function ProfileScreen() {
                 </ThemedText>
               </TouchableOpacity>
             </View>
-          ) : (
-            <TouchableOpacity style={styles.editButton} onPress={editProfile}>
-              <ThemedText style={styles.editButtonText}>
-                Edit Profile
-              </ThemedText>
-            </TouchableOpacity>
           )}
         </View>
 
-        {renderAchievements()}
+        {renderFavoritedWeaves()}
         {renderRecentActivity()}
 
-        {/* My Groups Quick Access */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>My Groups</ThemedText>
-          <TouchableOpacity style={styles.quickAction}>
-            <IconSymbol name="person.3.fill" size={20} color="#fff" />
-            <ThemedText style={styles.quickActionText}>
-              Manage My Groups
-            </ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#888" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Privacy & Settings */}
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>
-            Privacy & Settings
-          </ThemedText>
-          <TouchableOpacity style={styles.quickAction}>
-            <IconSymbol name="lock.fill" size={20} color="#fff" />
-            <ThemedText style={styles.quickActionText}>
-              Privacy Settings
-            </ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#888" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickAction}>
-            <IconSymbol name="bell.fill" size={20} color="#fff" />
-            <ThemedText style={styles.quickActionText}>
-              Notifications
-            </ThemedText>
-            <IconSymbol name="chevron.right" size={16} color="#888" />
-          </TouchableOpacity>
-        </View>
+        {/* Achievements */}
+        <View style={styles.section}>{renderAchievements()}</View>
       </ScrollView>
     </ThemedView>
   );
@@ -537,7 +659,7 @@ const styles = StyleSheet.create({
   profileSection: {
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingBottom: 30,
+    paddingBottom: 16,
   },
   profilePictureContainer: {
     position: "relative",
@@ -590,10 +712,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     width: "100%",
-    paddingVertical: 16,
-    marginBottom: 24,
-    backgroundColor: "#0a0a0a",
-    borderRadius: 12,
+    paddingVertical: 20,
+    marginBottom: 8,
+    backgroundColor: "transparent",
     marginHorizontal: 20,
   },
   statItem: {
@@ -626,49 +747,59 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: 20,
     marginBottom: 24,
-    backgroundColor: "#0a0a0a",
-    borderRadius: 12,
+    backgroundColor: "transparent",
     marginHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 8,
+  },
+  favoritesSection: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    marginTop: 12,
+    backgroundColor: "transparent",
+    marginHorizontal: 20,
+    paddingVertical: 4,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "600",
     marginBottom: 12,
     color: "#fff",
   },
   achievementsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
   achievementCard: {
-    width: (width - 52) / 2,
-    backgroundColor: "#0a0a0a",
-    borderRadius: 8,
-    padding: 12,
+    flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#333",
+    backgroundColor: "transparent",
+    padding: 12,
+    borderWidth: 0,
+    marginBottom: 8,
   },
   achievementEarned: {
-    backgroundColor: "#1a1a1a",
-    borderWidth: 1,
-    borderColor: "#555",
+    opacity: 1,
+  },
+  achievementIcon: {
+    width: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  achievementContent: {
+    flex: 1,
+    gap: 2,
   },
   achievementTitle: {
     fontSize: 12,
     fontWeight: "600",
-    marginTop: 6,
-    marginBottom: 4,
-    textAlign: "center",
     color: "#fff",
+    lineHeight: 16,
   },
   achievementDesc: {
     fontSize: 10,
-    color: "#888",
-    textAlign: "center",
-    lineHeight: 12,
+    color: "#aaa",
+    lineHeight: 14,
   },
   activityItem: {
     flexDirection: "row",
@@ -698,45 +829,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#888",
   },
-  quickAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  quickActionText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "500",
-    marginLeft: 12,
-    color: "#fff",
+  achievementSection: {
+    marginTop: 16,
   },
   achievementToggle: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#333",
-    marginBottom: 12,
+    paddingHorizontal: 0,
+    backgroundColor: "transparent",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   achievementHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+  },
+  achievementBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  achievementCount: {
+    fontSize: 10,
+    color: "#FFD700",
+    fontWeight: "600",
   },
   achievementToggleText: {
     fontSize: 13,
-    color: "#888",
+    color: "#ccc",
     fontWeight: "500",
+  },
+  achievementsContainer: {
+    marginTop: 12,
+    paddingHorizontal: 4,
   },
   profileImageContainer: {
     flex: 1,
@@ -748,16 +876,17 @@ const styles = StyleSheet.create({
   },
   editableUserName: {
     fontSize: 24,
-    fontWeight: "700",
-    marginBottom: 4,
+    fontWeight: "600",
+    marginBottom: 8,
     color: "#fff",
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    paddingHorizontal: 0,
     paddingVertical: 8,
     textAlign: "center",
-    borderWidth: 1,
-    borderColor: "#333",
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.2)",
   },
   editableBio: {
     fontSize: 14,
@@ -765,56 +894,173 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 20,
     fontWeight: "400",
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    paddingHorizontal: 0,
     paddingVertical: 8,
     textAlign: "center",
-    borderWidth: 1,
-    borderColor: "#333",
-    minHeight: 80,
+    borderWidth: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.2)",
+    minHeight: 60,
   },
   editButtonsContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 24,
     width: "100%",
     justifyContent: "center",
+    marginTop: 16,
   },
   cancelButton: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-    flex: 1,
-    maxWidth: 120,
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
   cancelButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#fff",
+    fontSize: 16,
+    fontWeight: "400",
+    color: "#888",
     textAlign: "center",
   },
   saveButton: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-    flex: 1,
-    maxWidth: 120,
+    backgroundColor: "transparent",
+    paddingHorizontal: 0,
+    paddingVertical: 8,
   },
   saveButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#000",
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#fff",
     textAlign: "center",
   },
   profileImage: {
     width: 96,
     height: 96,
     borderRadius: 48,
+  },
+  changePhotoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#333",
+    marginTop: 8,
+    gap: 6,
+  },
+  changePhotoText: {
+    fontSize: 12,
+    color: "#007AFF",
+    fontWeight: "500",
+  },
+  weavesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+  },
+  weaveTile: {
+    width: getTileWidth(),
+    marginBottom: 3,
+    marginRight: 2,
+  },
+  weaveTileContainer: {
+    backgroundColor: "#111",
+    borderRadius: 8,
+    borderWidth: 0,
+    overflow: "hidden",
+  },
+  weaveTileThumbnail: {
+    width: "100%",
+    aspectRatio: 9 / 16, // Vertical video aspect ratio
+    backgroundColor: "#0a0a0a",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  weaveTileImage: {
+    width: "100%",
+    height: "100%",
+  },
+  weaveTileDuration: {
+    position: "absolute",
+    bottom: 6,
+    right: 6,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  weaveTileDurationText: {
+    fontSize: getTileFontSizes().duration,
+    color: "rgba(255, 255, 255, 0.95)",
+    fontWeight: "500",
+    letterSpacing: 0.3,
+  },
+  weaveTileFavoriteButton: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.15)",
+  },
+  weaveTileTimestamp: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 0.5,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  weaveTileTimestampText: {
+    fontSize: Math.max(7, getTileFontSizes().time - 1),
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+    letterSpacing: 0.2,
+  },
+  weaveTileInfo: {
+    padding: 10,
+    gap: 4,
+  },
+  weaveTileGroup: {
+    fontSize: getTileFontSizes().group,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  weaveTilePrompt: {
+    fontSize: getTileFontSizes().prompt,
+    color: "#aaa",
+    lineHeight: getTileFontSizes().prompt + 3,
+    marginTop: 1,
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 32,
+    gap: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: "#888",
+    fontWeight: "500",
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+    lineHeight: 16,
+    paddingHorizontal: 20,
   },
 });
