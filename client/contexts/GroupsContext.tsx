@@ -158,7 +158,11 @@ export function GroupsProvider({ children }: GroupsProviderProps) {
   ): Promise<VideoSubmission[]> => {
     try {
       setError(null);
-      return await apiService.getVideoSubmissions(groupId);
+      const result = await apiService.getVideoSubmissions(groupId);
+      try {
+        // Simple local notification for new submissions count increase could be added here if needed
+      } catch {}
+      return result;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to load submissions";

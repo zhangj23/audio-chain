@@ -1,7 +1,37 @@
 // API configuration for the Weave frontend
+import Constants from "expo-constants";
+import { Platform } from "react-native";
+
+function getDefaultBaseUrl(): string {
+  try {
+    const expoGoConfig: any = (Constants as any).expoGoConfig || {};
+    const expoConfig: any = (Constants as any).expoConfig || {};
+    const hostFromDebugger: string | undefined = expoGoConfig.debuggerHost;
+    const hostFromConfig: string | undefined = expoConfig.hostUri;
+    const host = (hostFromDebugger || hostFromConfig || "").split(":")[0];
+    if (host) {
+      // On Android emulator, "localhost" points to the emulator, not host machine
+      if (
+        Platform.OS === "android" &&
+        (host === "localhost" || host === "127.0.0.1")
+      ) {
+        return "http://10.0.2.2:8000";
+      }
+      return `http://${host}:8000`;
+    }
+  } catch (_) {
+    // ignore
+  }
+  // Sensible platform-specific fallbacks
+  if (Platform.OS === "android") {
+    return "http://10.0.2.2:8000";
+  }
+  return "http://localhost:8000";
+}
+
 export const API_CONFIG = {
-  // Base URL for the backend API
-  BASE_URL: process.env.EXPO_PUBLIC_API_URL || "http://129.161.69.91:8000",
+  // Base URL for the backend API (prefer env var; fallback to device's LAN host)
+  BASE_URL: process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl(),
 
   // Development settings
   SKIP_AUTH: process.env.EXPO_PUBLIC_SKIP_AUTH === "true",

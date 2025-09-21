@@ -9,6 +9,8 @@ import {
   RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
+import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { StatusBar } from "expo-status-bar";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
@@ -34,11 +36,19 @@ export default function HomeScreen() {
   const [userSubmissions, setUserSubmissions] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<GroupInvite[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(false);
+  const [lastOpened, setLastOpened] = useState<Record<number, number>>({});
+
+  const LAST_OPENED_STORAGE_KEY = "weave_groups_last_opened";
+  const SUBMISSIONS_KEY = "weave_prev_submission_counts";
+  const DEADLINE_NOTIFS_KEY = "weave_deadline_notifs";
+  const [prevSubmissionCounts, setPrevSubmissionCounts] = useState<Record<number, number>>({});
+  const [scheduledDeadlines, setScheduledDeadlines] = useState<Record<number, number>>({});
 
   const onRefresh = async () => {
     setRefreshing(true);
     await refreshGroups();
     await fetchPendingInvites();
+    await loadLastOpened();
     setRefreshing(false);
   };
 
@@ -57,7 +67,65 @@ export default function HomeScreen() {
   // Fetch invites on component mount
   React.useEffect(() => {
     fetchPendingInvites();
+    loadLastOpened();
+    loadPrevSubmissionCounts();
+    loadScheduledDeadlines();
   }, []);
+
+  const loadPrevSubmissionCounts = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(SUBMISSIONS_KEY);
+      if (raw) setPrevSubmissionCounts(JSON.parse(raw) || {});
+    } catch {}
+  };
+
+  const savePrevSubmissionCounts = async (data: Record<number, number>) => {
+    setPrevSubmissionCounts(data);
+    try {
+      await AsyncStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(data));
+    } catch {}
+  };
+
+  const loadScheduledDeadlines = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(DEADLINE_NOTIFS_KEY);
+      if (raw) setScheduledDeadlines(JSON.parse(raw) || {});
+    } catch {}
+  };
+
+  const saveScheduledDeadlines = async (data: Record<number, number>) => {
+    setScheduledDeadlines(data);
+    try {
+      await AsyncStorage.setItem(DEADLINE_NOTIFS_KEY, JSON.stringify(data));
+    } catch {}
+  };
+
+  const loadLastOpened = async () => {
+    try {
+      const raw = await AsyncStorage.getItem(LAST_OPENED_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setLastOpened(parsed || {});
+      }
+    } catch (e) {
+      console.error("Failed to load last opened map", e);
+    }
+  };
+
+  const updateLastOpened = async (groupId: number) => {
+    try {
+      const now = Date.now();
+      setLastOpened((prev) => {
+        const next = { ...prev, [groupId]: now };
+        AsyncStorage.setItem(LAST_OPENED_STORAGE_KEY, JSON.stringify(next)).catch(
+          () => {}
+        );
+        return next;
+      });
+    } catch (e) {
+      // Non-fatal
+    }
+  };
 
   const fetchUserSubmissions = async (groupId: number) => {
     try {
@@ -91,9 +159,77 @@ export default function HomeScreen() {
   };
 
   const handleGroupPress = (group: any) => {
+    updateLastOpened(group.id);
     setSelectedGroup(group);
     fetchUserSubmissions(group.id);
   };
+
+  // Poll for other members' submissions and notify on increases
+  React.useEffect(() => {
+    let isMounted = true;
+    const poll = async () => {
+      if (!user || !groups || groups.length === 0) return;
+      const map: Record<number, number> = { ...prevSubmissionCounts };
+      for (const g of groups) {
+        try {
+          const subs = await apiService.getGroupSubmissions(g.id);
+          const othersCount = subs.filter((s: any) => s.user_id !== user.id).length;
+          const prev = map[g.id] || 0;
+          if (othersCount > prev) {
+            try {
+              await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: "New video posted",
+                  body: `${othersCount - prev} new video(s) in ${g.name}`,
+                },
+                trigger: null,
+              });
+            } catch {}
+          }
+          map[g.id] = othersCount;
+        } catch {}
+      }
+      if (isMounted) await savePrevSubmissionCounts(map);
+    };
+
+    poll();
+    const id = setInterval(poll, 120000);
+    return () => {
+      isMounted = false;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, user]);
+
+  // Schedule deadline reminders (1 hour before deadline)
+  React.useEffect(() => {
+    const schedule = async () => {
+      if (!groups || groups.length === 0) return;
+      const now = Date.now();
+      const updated: Record<number, number> = { ...scheduledDeadlines };
+      for (const g of groups) {
+        if (!g.deadline_at) continue;
+        const deadlineMs = new Date(g.deadline_at).getTime();
+        const triggerMs = deadlineMs - 60 * 60 * 1000;
+        if (triggerMs > now && updated[g.id] !== triggerMs) {
+          try {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: "Reminder to post",
+                body: `Don't forget to post in ${g.name} before the deadline!`,
+              },
+              trigger: new Date(triggerMs),
+            });
+            updated[g.id] = triggerMs;
+          } catch {}
+        }
+      }
+      await saveScheduledDeadlines(updated);
+    };
+
+    schedule();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups]);
 
   if (isLoading) {
     return (
@@ -127,7 +263,13 @@ export default function HomeScreen() {
       >
         {/* Header inside scroll so it scrolls with content */}
         <View style={styles.header}>
-          <ThemedText style={styles.title}>Your Groups</ThemedText>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={() => setShowInvitesModal(true)}
+          >
+            <IconSymbol name="bell" size={20} color="#007AFF" />
+          </TouchableOpacity>
+          <ThemedText style={styles.title}>Weave</ThemedText>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => setShowCreateModal(true)}
@@ -141,16 +283,14 @@ export default function HomeScreen() {
           <View style={styles.invitesNotification}>
             <View style={styles.invitesContent}>
               <View style={styles.invitesInfo}>
-                <IconSymbol name="envelope" size={20} color="#007AFF" />
-                <ThemedText style={styles.invitesText}>
-                  {pendingInvites.length} pending invite{pendingInvites.length > 1 ? 's' : ''}
-                </ThemedText>
+                <IconSymbol name="bell" size={20} color="#007AFF" />
+                <ThemedText style={styles.invitesText}>Notifications</ThemedText>
               </View>
               <TouchableOpacity
                 style={styles.viewInvitesButton}
                 onPress={() => setShowInvitesModal(true)}
               >
-                <ThemedText style={styles.viewInvitesButtonText}>View Invites</ThemedText>
+                <ThemedText style={styles.viewInvitesButtonText}>Notifications</ThemedText>
               </TouchableOpacity>
             </View>
           </View>
@@ -175,7 +315,17 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            groups.map((group) => (
+            [...groups]
+              .sort((a: any, b: any) => {
+                const ta = lastOpened[a.id] || 0;
+                const tb = lastOpened[b.id] || 0;
+                if (tb !== ta) return tb - ta; // most recently opened first
+                // fallback: newest created first
+                const ca = new Date(a.created_at).getTime() || 0;
+                const cb = new Date(b.created_at).getTime() || 0;
+                return cb - ca;
+              })
+              .map((group) => (
               <TouchableOpacity
                 key={group.id}
                 style={styles.groupCard}
@@ -212,7 +362,7 @@ export default function HomeScreen() {
                   </View>
                 </View>
               </TouchableOpacity>
-            ))
+              ))
           )}
         </View>
       </ScrollView>
@@ -319,11 +469,21 @@ const styles = StyleSheet.create({
     marginBottom: 10, // Add bottom margin for better spacing
   },
   title: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#fff",
+    textAlign: "center",
+    flex: 1,
   },
   addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#1a1a1a",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
