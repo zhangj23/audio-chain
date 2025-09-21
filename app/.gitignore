@@ -6,9 +6,12 @@ env/
 
 # Python cache
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
+*$py.class
 .Python
 
 # Environment variables
@@ -30,3 +33,8 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+./models/__pycache__/
+./models/
+
+.pyc
