@@ -7,6 +7,7 @@ import {
   Modal,
   Animated,
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -27,9 +28,14 @@ import { useAuth } from "../../contexts/AuthContext";
 
 export default function RecordScreen() {
   // Context hooks
-  const { groups, isLoading: groupsLoading, error: groupsError, refreshGroups } = useGroups();
+  const {
+    groups,
+    isLoading: groupsLoading,
+    error: groupsError,
+    refreshGroups,
+  } = useGroups();
   const { isAuthenticated } = useAuth();
-  
+
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
@@ -47,7 +53,7 @@ export default function RecordScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   // Note: Video storage is now handled by shared videoStorage utility
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const cameraRef = useRef<CameraView>(null);
   const videoRef = useRef<Video>(null);
 
@@ -346,17 +352,18 @@ export default function RecordScreen() {
       // For React Native, we need to create a file object from the URI
       const videoFile = {
         uri: recordedVideoUri,
-        type: 'video/mp4',
+        type: "video/mp4",
         name: `video_${Date.now()}.mp4`,
       } as any;
 
-      // Use apiService to upload video
-      const result = await apiService.submitVideo(
+      // Use apiService to upload video with prompt_id
+      await apiService.submitVideo(
         selectedGroup.id,
         videoFile,
-        recordingTime
+        recordingTime,
+        1 // Default prompt_id, you can get this from the group's current_prompt if available
       );
-      
+
       // Also store locally for offline access
       videoStorage.addVideo(selectedGroup.id.toString(), {
         uri: recordedVideoUri,
@@ -470,7 +477,9 @@ export default function RecordScreen() {
           {/* Prompt */}
           <View style={styles.promptContainer}>
             <ThemedText style={styles.prompt}>
-              {selectedGroup?.current_prompt ? `"${selectedGroup.current_prompt.text}"` : "No prompt available"}
+              {selectedGroup?.current_prompt
+                ? `"${selectedGroup.current_prompt.text}"`
+                : "No prompt available"}
             </ThemedText>
             {selectedGroup && (
               <ThemedText style={styles.timeLeft}>
@@ -598,18 +607,14 @@ export default function RecordScreen() {
           {!selectedGroup && (
             <View style={styles.submittedOverlay}>
               <View style={styles.submittedCard}>
-                <IconSymbol
-                  name="person.2.fill"
-                  size={40}
-                  color="#007AFF"
-                />
+                <IconSymbol name="person.2.fill" size={40} color="#007AFF" />
                 <ThemedText style={styles.submittedTitle}>
                   Select a Group
                 </ThemedText>
                 <ThemedText style={styles.submittedSubtitle}>
                   Choose a group to start recording
                 </ThemedText>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.viewGroupButton}
                   onPress={() => setShowGroupSelector(true)}
                 >
@@ -654,18 +659,29 @@ export default function RecordScreen() {
             >
               {groupsLoading ? (
                 <View style={styles.loadingContainer}>
-                  <ThemedText style={styles.loadingText}>Loading groups...</ThemedText>
+                  <ThemedText style={styles.loadingText}>
+                    Loading groups...
+                  </ThemedText>
                 </View>
               ) : groupsError ? (
                 <View style={styles.errorContainer}>
-                  <ThemedText style={styles.errorText}>Error: {groupsError}</ThemedText>
-                  <TouchableOpacity style={styles.retryButton} onPress={refreshGroups}>
-                    <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
+                  <ThemedText style={styles.errorText}>
+                    Error: {groupsError}
+                  </ThemedText>
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={refreshGroups}
+                  >
+                    <ThemedText style={styles.retryButtonText}>
+                      Retry
+                    </ThemedText>
                   </TouchableOpacity>
                 </View>
               ) : groups.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <ThemedText style={styles.emptyText}>No groups available</ThemedText>
+                  <ThemedText style={styles.emptyText}>
+                    No groups available
+                  </ThemedText>
                 </View>
               ) : (
                 groups.map((group, index) => {
@@ -716,7 +732,9 @@ export default function RecordScreen() {
                       {/* Current Prompt */}
                       <View style={styles.promptSection}>
                         <ThemedText style={styles.groupCardPrompt}>
-                          {group.current_prompt ? `"${group.current_prompt.text}"` : "No prompt available"}
+                          {group.current_prompt
+                            ? `"${group.current_prompt.text}"`
+                            : "No prompt available"}
                         </ThemedText>
                       </View>
 
@@ -724,7 +742,7 @@ export default function RecordScreen() {
                       <View style={styles.membersSection}>
                         <View style={styles.memberAvatars}>
                           <ThemedText style={styles.memberCountText}>
-                            {memberCount} member{memberCount !== 1 ? 's' : ''}
+                            {memberCount} member{memberCount !== 1 ? "s" : ""}
                           </ThemedText>
                         </View>
                       </View>

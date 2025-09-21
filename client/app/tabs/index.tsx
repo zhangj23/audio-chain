@@ -9,6 +9,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -77,6 +78,7 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      <StatusBar style="light" />
       <ScrollView
         style={styles.scrollView}
         refreshControl={
@@ -187,6 +189,7 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    paddingBottom: 100, // Add bottom padding to prevent content from being cut off by tab bar
   },
   loadingContainer: {
     flex: 1,
@@ -228,8 +231,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 60,
+    paddingTop: 20,
     paddingBottom: 20,
+    marginBottom: 10, // Add bottom margin for better spacing
   },
   title: {
     fontSize: 32,
@@ -246,6 +250,7 @@ const styles = StyleSheet.create({
   },
   groupsList: {
     paddingHorizontal: 20,
+    paddingTop: 10, // Add top padding for better spacing
   },
   emptyState: {
     alignItems: "center",

@@ -539,11 +539,15 @@ export function GroupDetail({
                     <View
                       style={[
                         styles.memberAvatar,
-                        actuallyHasSubmitted && styles.memberAvatarSubmitted,
+                        actuallyHasSubmitted
+                          ? styles.memberAvatarSubmitted
+                          : null,
                       ]}
                     >
                       <ThemedText style={styles.memberInitial}>
-                        {member.charAt(0)}
+                        {typeof member === "string"
+                          ? member.charAt(0)
+                          : member.user?.username?.charAt(0) || "U"}
                       </ThemedText>
                       {actuallyHasSubmitted && (
                         <View style={styles.submittedBadge}>

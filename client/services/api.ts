@@ -306,34 +306,52 @@ class ApiService {
   async submitVideo(
     groupId: number,
     videoFile: File | Blob,
-    duration: number
+    duration: number,
+    promptId: number = 1
   ): Promise<VideoSubmission> {
     // Upload video directly to backend
     const formData = new FormData();
-    formData.append("video", videoFile);
-    formData.append("group_id", groupId.toString());
-    formData.append("duration", duration.toString());
+    formData.append("file", videoFile); // Changed from "video" to "file" to match backend
 
-    const response = await fetch(
-      `${this.baseUrl}${API_CONFIG.ENDPOINTS.VIDEOS.UPLOAD}`,
-      {
-        method: "POST",
-        body: formData,
-        headers: {
-          ...this.getHeaders(),
-          // Remove Content-Type to let browser set it for FormData
-        },
-      }
+    // Add query parameters to URL
+    const url = new URL(`${this.baseUrl}${API_CONFIG.ENDPOINTS.VIDEOS.UPLOAD}`);
+    url.searchParams.append("group_id", groupId.toString());
+    url.searchParams.append("prompt_id", promptId.toString());
+    url.searchParams.append("duration", duration.toString());
+
+    // Get headers without Content-Type for FormData
+    const headers = this.getHeaders();
+    delete headers["Content-Type"];
+
+    console.log(
+      "API Service - Making video upload request to:",
+      url.toString()
     );
+    console.log("API Service - Headers:", headers);
+
+    const response = await fetch(url.toString(), {
+      method: "POST",
+      body: formData,
+      headers,
+    });
+
+    console.log("API Service - Video upload response status:", response.status);
 
     if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ detail: "Unknown error" }));
-      throw new Error(errorData.detail || `HTTP ${response.status}`);
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorData = await response.json();
+        console.log("API Service - Video upload error response:", errorData);
+        errorMessage = errorData.detail || errorData.message || errorMessage;
+      } catch (e) {
+        console.error("Failed to parse error response:", e);
+      }
+      throw new Error(errorMessage);
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log("API Service - Video upload success response:", result);
+    return result;
   }
 
   async getCompilations(groupId: number): Promise<WeeklyCompilation[]> {
