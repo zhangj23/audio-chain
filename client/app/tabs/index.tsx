@@ -7,6 +7,7 @@ import {
   Modal,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as Notifications from "expo-notifications";
@@ -90,24 +91,37 @@ export default function HomeScreen() {
     const notificationList: any[] = [];
     
     try {
-    
-    // Add invite notifications (only if not already seen)
-    invites.forEach((invite) => {
-      const notificationId = `invite-${invite.id}`;
-      if (!seenNotifications.has(notificationId)) {
-        notificationList.push({
-          id: notificationId,
-          type: "invite",
-          title: "Group Invitation",
-          message: `${invite.invited_by_user?.username || "Someone"} invited you to join "${invite.group?.name || "a group"}"`,
-          timestamp: invite.created_at,
-          groupName: invite.group?.name,
-          userName: invite.invited_by_user?.username,
-          groupId: invite.group_id,
-          isRead: false,
+      // First, clean up any existing invite notifications for invites that no longer exist
+      const currentInviteIds = new Set(invites.map(invite => invite.id));
+      setNotifications(prev => {
+        const filtered = prev.filter(notification => {
+          if (notification.type === "invite" && notification.inviteId) {
+            return currentInviteIds.has(notification.inviteId);
+          }
+          return true; // Keep non-invite notifications
         });
-      }
-    });
+        console.log(`Cleaned up invite notifications, removed ${prev.length - filtered.length} stale notifications`);
+        return filtered;
+      });
+    
+      // Add invite notifications (only if not already seen)
+      invites.forEach((invite) => {
+        const notificationId = `invite-${invite.id}`;
+        if (!seenNotifications.has(notificationId)) {
+          notificationList.push({
+            id: notificationId,
+            type: "invite",
+            title: "Group Invitation",
+            message: `${invite.invited_by_user?.username || "Someone"} invited you to join "${invite.group?.name || "a group"}"`,
+            timestamp: invite.created_at,
+            groupName: invite.group?.name,
+            userName: invite.invited_by_user?.username,
+            groupId: invite.group_id,
+            inviteId: invite.id,
+            isRead: false,
+          });
+        }
+      });
 
     // Add submission notifications - check actual submission data
     for (const group of groups) {
@@ -211,7 +225,116 @@ export default function HomeScreen() {
     saveSeenNotifications(newSeenNotifications);
   };
 
-  const handleNotificationPress = (notification: any) => {
+  const handleAcceptInvite = async (inviteId: number) => {
+    try {
+      await apiService.acceptInvite(inviteId);
+      
+      // Show success message
+      Alert.alert("Success", "You've joined the group!");
+      
+      // Refresh groups to show the new group
+      await refreshGroups();
+      
+      // Refresh invites to remove the accepted invite
+      await fetchPendingInvites();
+      
+      // Mark the notification as seen to remove it from the list
+      const notificationId = `invite-${inviteId}`;
+      console.log(`Accepting invite ${inviteId}, removing notification ${notificationId}`);
+      const newSeenNotifications = new Set(seenNotifications);
+      newSeenNotifications.add(notificationId);
+      setSeenNotifications(newSeenNotifications);
+      saveSeenNotifications(newSeenNotifications);
+      
+      // Remove the notification from the current notifications list
+      setNotifications(prev => {
+        const filtered = prev.filter(n => n.id !== notificationId);
+        console.log(`Removed notification ${notificationId}, remaining: ${filtered.length}`);
+        return filtered;
+      });
+      
+      // Close the notifications modal
+      setShowNotificationsModal(false);
+    } catch (error) {
+      console.error("Failed to accept invite:", error);
+      
+      // Check if the error is because invite was already processed
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("already processed") || errorMessage.includes("not found")) {
+        // Invite was already processed, just remove the notification
+        const notificationId = `invite-${inviteId}`;
+        console.log(`Invite ${inviteId} already processed, removing notification ${notificationId}`);
+        
+        // Mark as seen and remove from list
+        const newSeenNotifications = new Set(seenNotifications);
+        newSeenNotifications.add(notificationId);
+        setSeenNotifications(newSeenNotifications);
+        saveSeenNotifications(newSeenNotifications);
+        
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        setShowNotificationsModal(false);
+        
+        Alert.alert("Info", "This invite has already been processed.");
+      } else {
+        Alert.alert("Error", "Failed to accept invite. Please try again.");
+      }
+    }
+  };
+
+  const handleDeclineInvite = async (inviteId: number) => {
+    try {
+      await apiService.declineInvite(inviteId);
+      
+      // Show success message
+      Alert.alert("Success", "Invite declined.");
+      
+      // Refresh invites to remove the declined invite
+      await fetchPendingInvites();
+      
+      // Mark the notification as seen to remove it from the list
+      const notificationId = `invite-${inviteId}`;
+      console.log(`Declining invite ${inviteId}, removing notification ${notificationId}`);
+      const newSeenNotifications = new Set(seenNotifications);
+      newSeenNotifications.add(notificationId);
+      setSeenNotifications(newSeenNotifications);
+      saveSeenNotifications(newSeenNotifications);
+      
+      // Remove the notification from the current notifications list
+      setNotifications(prev => {
+        const filtered = prev.filter(n => n.id !== notificationId);
+        console.log(`Removed notification ${notificationId}, remaining: ${filtered.length}`);
+        return filtered;
+      });
+      
+      // Close the notifications modal
+      setShowNotificationsModal(false);
+    } catch (error) {
+      console.error("Failed to decline invite:", error);
+      
+      // Check if the error is because invite was already processed
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("already processed") || errorMessage.includes("not found")) {
+        // Invite was already processed, just remove the notification
+        const notificationId = `invite-${inviteId}`;
+        console.log(`Invite ${inviteId} already processed, removing notification ${notificationId}`);
+        
+        // Mark as seen and remove from list
+        const newSeenNotifications = new Set(seenNotifications);
+        newSeenNotifications.add(notificationId);
+        setSeenNotifications(newSeenNotifications);
+        saveSeenNotifications(newSeenNotifications);
+        
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        setShowNotificationsModal(false);
+        
+        Alert.alert("Info", "This invite has already been processed.");
+      } else {
+        Alert.alert("Error", "Failed to decline invite. Please try again.");
+      }
+    }
+  };
+
+  const handleNotificationPress = async (notification: any) => {
     // Mark notification as seen
     const newSeenNotifications = new Set(seenNotifications);
     newSeenNotifications.add(notification.id);
@@ -221,10 +344,9 @@ export default function HomeScreen() {
     // Close the notifications modal
     setShowNotificationsModal(false);
     
-    // Find the group by ID
+    // For non-invite notifications, navigate to group
     const group = groups.find(g => g.id === notification.groupId);
     if (group) {
-      // Navigate to the group detail
       handleGroupPress(group);
     }
   };
@@ -247,6 +369,15 @@ export default function HomeScreen() {
       generateNotifications(pendingInvites);
     }
   }, [groups, pendingInvites, seenNotifications]);
+
+  // Periodically cleanup stale notifications
+  React.useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      cleanupStaleNotifications();
+    }, 30000); // Clean up every 30 seconds
+
+    return () => clearInterval(cleanupInterval);
+  }, []);
 
   const loadPrevSubmissionCounts = async () => {
     try {
@@ -287,6 +418,36 @@ export default function HomeScreen() {
       await AsyncStorage.setItem(SEEN_NOTIFICATIONS_KEY, JSON.stringify(seenArray));
     } catch (error) {
       console.error("Failed to save seen notifications:", error);
+    }
+  };
+
+  const cleanupStaleNotifications = async () => {
+    try {
+      // Get current pending invites
+      const invites = await apiService.getPendingInvites();
+      const currentInviteIds = new Set(invites.map(invite => invite.id));
+      
+      // Remove notifications for invites that no longer exist
+      setNotifications(prev => {
+        const filtered = prev.filter(notification => {
+          if (notification.type === "invite" && notification.inviteId) {
+            const shouldKeep = currentInviteIds.has(notification.inviteId);
+            if (!shouldKeep) {
+              console.log(`Removing stale notification for invite ${notification.inviteId}`);
+            }
+            return shouldKeep;
+          }
+          return true; // Keep non-invite notifications
+        });
+        
+        if (prev.length !== filtered.length) {
+          console.log(`Cleaned up ${prev.length - filtered.length} stale invite notifications`);
+        }
+        
+        return filtered;
+      });
+    } catch (error) {
+      console.error("Failed to cleanup stale notifications:", error);
     }
   };
 
@@ -491,7 +652,10 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.iconButton}
-            onPress={() => setShowNotificationsModal(true)}
+            onPress={() => {
+              cleanupStaleNotifications();
+              setShowNotificationsModal(true);
+            }}
           >
             <IconSymbol name="bell" size={20} color="#007AFF" />
             {notifications.filter(n => !n.isRead).length > 0 && (
@@ -523,7 +687,10 @@ export default function HomeScreen() {
               </View>
               <TouchableOpacity
                 style={styles.viewInvitesButton}
-                onPress={() => setShowNotificationsModal(true)}
+                onPress={() => {
+                  cleanupStaleNotifications();
+                  setShowNotificationsModal(true);
+                }}
               >
                 <ThemedText style={styles.viewInvitesButtonText}>View All</ThemedText>
               </TouchableOpacity>
@@ -654,6 +821,8 @@ export default function HomeScreen() {
         notifications={notifications}
         onMarkAsRead={markNotificationAsRead}
         onNotificationPress={handleNotificationPress}
+        onAcceptInvite={handleAcceptInvite}
+        onDeclineInvite={handleDeclineInvite}
       />
     </ThemedView>
   );

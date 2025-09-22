@@ -22,6 +22,7 @@ interface NotificationItem {
   groupName?: string;
   userName?: string;
   groupId?: number;
+  inviteId?: number;
   isRead: boolean;
 }
 
@@ -31,6 +32,8 @@ interface NotificationsModalProps {
   notifications: NotificationItem[];
   onMarkAsRead?: (notificationId: string) => void;
   onNotificationPress?: (notification: NotificationItem) => void;
+  onAcceptInvite?: (inviteId: number) => void;
+  onDeclineInvite?: (inviteId: number) => void;
 }
 
 export function NotificationsModal({
@@ -39,6 +42,8 @@ export function NotificationsModal({
   notifications,
   onMarkAsRead,
   onNotificationPress,
+  onAcceptInvite,
+  onDeclineInvite,
 }: NotificationsModalProps) {
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -120,13 +125,12 @@ export function NotificationsModal({
             </View>
           ) : (
             notifications.map((notification) => (
-              <TouchableOpacity
+              <View
                 key={notification.id}
                 style={[
                   styles.notificationItem,
                   !notification.isRead && styles.unreadNotification,
                 ]}
-                onPress={() => handleNotificationPress(notification)}
               >
                 <View style={styles.notificationContent}>
                   <View style={styles.notificationIcon}>
@@ -149,7 +153,33 @@ export function NotificationsModal({
                   </View>
                   {!notification.isRead && <View style={styles.unreadDot} />}
                 </View>
-              </TouchableOpacity>
+                
+                {/* Action buttons for invite notifications */}
+                {notification.type === "invite" && notification.inviteId && (
+                  <View style={styles.inviteActions}>
+                    <TouchableOpacity
+                      style={styles.declineButton}
+                      onPress={() => onDeclineInvite?.(notification.inviteId!)}
+                    >
+                      <ThemedText style={styles.declineButtonText}>Decline</ThemedText>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.acceptButton}
+                      onPress={() => onAcceptInvite?.(notification.inviteId!)}
+                    >
+                      <ThemedText style={styles.acceptButtonText}>Accept</ThemedText>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                
+                {/* For non-invite notifications, make the whole item clickable */}
+                {notification.type !== "invite" && (
+                  <TouchableOpacity
+                    style={styles.clickableOverlay}
+                    onPress={() => handleNotificationPress(notification)}
+                  />
+                )}
+              </View>
             ))
           )}
         </ScrollView>
@@ -304,5 +334,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#007AFF",
+  },
+  inviteActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 12,
+    gap: 8,
+  },
+  declineButton: {
+    backgroundColor: "#1a1a1a",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  declineButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8E8E93",
+  },
+  acceptButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  acceptButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  clickableOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
 });
